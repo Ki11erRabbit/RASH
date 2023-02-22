@@ -8,6 +8,7 @@ mod histedit;
 mod input;
 mod jobs;
 mod machdep;
+mod mail;
 mod makeinit;
 mod makenodes;
 mod makesyntax;

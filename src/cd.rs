@@ -131,7 +131,7 @@ fn docd(dest: &str, flags: i32) -> Result<i32,std::io::Error>{
     }
     match env::set_current_dir(Path::new(dest)) {
         Ok(_) => {
-            setpwd(Some(&dir),true);
+            setpwd(Some(dir),true);
             exec::hashcd()
         },
         Err(e) => return Err(e),
@@ -264,7 +264,7 @@ pub fn pwdcmd(argc: i32, argv: Vec<String>) -> i32 {
     flags = cd_options();
     if flags != 0 {
         if unsafe { PHYSDIR == None } {
-            setpwd(Some(&dir), false);
+            setpwd(Some(dir), false);
             dir = unsafe { PHYSDIR.clone().unwrap() };
         }
     }
@@ -272,7 +272,7 @@ pub fn pwdcmd(argc: i32, argv: Vec<String>) -> i32 {
     0
 }
 
-pub fn setpwd(val: Option<&str>, setold:bool) {
+pub fn setpwd(val: Option<String>, setold:bool) {
     let mut oldcur: Option<String>;
     let mut dir: String;
 
@@ -301,7 +301,7 @@ pub fn setpwd(val: Option<&str>, setold:bool) {
         },
         None => (),
     }
-    if val == None || oldcur.as_ref().unwrap() == val.unwrap()  {
+    if val == None || oldcur.as_ref().unwrap() == val.as_ref().unwrap().as_str()  {
         let path = env::current_dir().expect("Unable to get curr dir");
         unsafe {
             PHYSDIR = Some(path.to_str().unwrap().to_string().clone());

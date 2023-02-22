@@ -54,6 +54,10 @@ pub const OPTLETTERS: Vec<char> = vec![
 	0 as char,
 ];
 
+pub fn getoptsreset(value: &str) {
+
+}
+
 unsafe fn get_next_in_arglist() -> Option<String> {
     if ARGLIST_INDEX > ARGLIST.len() {
         return None;

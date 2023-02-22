@@ -6,6 +6,10 @@ pub fn hashcd() {
 
 }
 
+pub fn changepath(newval: &str) {
+
+}
+
 
 /*
  * Do a path search.  The variable path (passed by reference) should be
