@@ -1,4 +1,4 @@
-
+use lazy_static::lazy_static;
 
 pub struct ShParam {
     nparam: u32,
@@ -53,6 +53,112 @@ pub const OPTLETTERS: Vec<char> = vec![
 	0 as char,
 	0 as char,
 ];
+
+pub static mut OPTLIST: [i32;17] = [0;17];
+
+#[macro_export]
+macro_rules! eflag {
+    () => {
+        unsafe { OPTLIST[0] }
+    };
+}
+#[macro_export]
+macro_rules! fflag {
+    () => {
+        unsafe { OPTLIST[1] }
+    };
+}
+#[macro_export]
+macro_rules! Iflag {
+    () => {
+        unsafe { OPTLIST[2] }
+    };
+}
+#[macro_export]
+macro_rules! iflag {
+    () => {
+        unsafe { OPTLIST[3] }
+    };
+}
+#[macro_export]
+macro_rules! mflag {
+    () => {
+        unsafe { OPTLIST[4] }
+    };
+}
+#[macro_export]
+macro_rules! nfalg {
+    () => {
+        unsafe { OPTLIST[5] }
+    };
+}
+#[macro_export]
+macro_rules! sflag {
+    () => {
+        unsafe { OPTLIST[6] }
+    };
+}
+#[macro_export]
+macro_rules! xflag {
+    () => {
+        unsafe { OPTLIST[7] }
+    };
+}
+#[macro_export]
+macro_rules! vflag {
+    () => {
+        unsafe { OPTLIST[8] }
+    };
+}
+#[macro_export]
+macro_rules! Vflag {
+    () => {
+        unsafe { OPTLIST[9] }
+    };
+}
+#[macro_export]
+macro_rules! Eflag {
+    () => {
+        unsafe { OPTLIST[10] }
+    };
+}
+#[macro_export]
+macro_rules! Cflag {
+    () => {
+        unsafe { OPTLIST[11] }
+    };
+}
+#[macro_export]
+macro_rules! aflag {
+    () => {
+        unsafe { OPTLIST[12] }
+    };
+}
+#[macro_export]
+macro_rules! bflag {
+    () => {
+        unsafe { OPTLIST[13] }
+    };
+}
+#[macro_export]
+macro_rules! uflag {
+    () => {
+        unsafe { OPTLIST[14] }
+    };
+}
+#[macro_export]
+macro_rules! nolog {
+    () => {
+        unsafe { OPTLIST[15] }
+    };
+}
+#[macro_export]
+macro_rules! debug {
+    () => {
+        unsafe { OPTLIST[16] }
+    };
+}
+
 
 pub fn getoptsreset(value: &str) {
 
