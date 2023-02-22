@@ -1,4 +1,4 @@
-
+use std::collections::HashMap;
 /* flags */
 pub const VEXPORT:i32    = 0x01; // variable is exported
 pub const VREADONLY:i32  = 0x02; // variable cannot be modified
@@ -23,6 +23,12 @@ pub struct LocalVar {
     text: &'static str, // saved text
 }
 
+struct LocalVarList {
+
+}
+
+pub static mut LocalVars: HashMap<LocalVar> = HashMap::new();
+
 pub fn tempfunc(temp: &str) {
 
 }
@@ -31,3 +37,14 @@ pub fn setvar(name: &str, val: &str, flags: i32) -> Box<Var> {
     
     Box::new(Var{ flags: VEXPORT, text: "temp",func: tempfunc})
 }
+
+fn lookupvar(name: &str) -> Option<&str> {
+    None
+}
+
+
+#[inline]
+pub fn bltinlookup(name: &str) -> Option<&str> {
+    lookupvar(name)
+}
+

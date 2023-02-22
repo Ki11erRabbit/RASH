@@ -1,3 +1,4 @@
+mod show;
 mod alias;
 mod cd;
 mod error;
