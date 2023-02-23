@@ -6,6 +6,10 @@ pub fn hashcd() {
 
 }
 
+pub fn unset_func(name: Option<String>) {
+
+}
+
 pub fn changepath(newval: &str) {
 
 }

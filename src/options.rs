@@ -167,6 +167,10 @@ pub fn getoptsreset(value: &str) {
 
 }
 
+pub fn opts_changed() {
+
+}
+
 unsafe fn get_next_in_arglist(arg: &mut Option<String> ) -> Option<String> {
     if ARGLIST_INDEX > ARGLIST.len() {
         *arg = None;

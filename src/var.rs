@@ -106,6 +106,23 @@ impl LocalVar {
     pub fn new(flags:i32, text: &str, var: Option<Arc<Mutex<Var>>>) -> LocalVar {
         LocalVar {flags: flags, text: text.to_string(), var: var }
     }
+    pub fn get_val(&self) -> Option<String> {
+        let pos = match self.text.find("=") {
+            None => return None,
+            Some(pos) => pos + 1 ,
+        };
+        Some(self.text.get(pos..).unwrap().to_string())
+    }
+
+    pub fn get_key(&self) -> String {
+        
+        let pos = match self.text.find("=") {
+            None => self.text.len(),
+            Some(pos) => pos,
+        };
+        
+        self.text.get(..pos).unwrap().to_string()
+    }
 }
 
 
@@ -117,7 +134,7 @@ lazy_static! {
     static ref LINENOVAR: String = "LINENO=".to_string();
     pub static ref LOCALVARS: HashMap<String, LocalVar> = HashMap::new();
     pub static ref VARTAB: Mutex<BTreeMap<String, Arc<Mutex<Var>>>> = Mutex::new(BTreeMap::new());
-    pub static ref LOCALVAR_STACK: Mutex<Vec<Arc<Mutex<LocalVar>>>> = Mutex::new(Vec::new());
+    pub static ref LOCALVAR_STACK: Mutex<Vec<Box<HashMap<String,LocalVar>>>> = Mutex::new(Vec::new());
     pub static ref VARINIT: Vec<Arc<Mutex<Var>>> = vec![
         Arc::new(Mutex::new(Var::new(VSTRFIXED|VTEXTFIXED|VUNSET,   	"ATTY",	    None ))),
         Arc::new(Mutex::new(Var::new( 	VSTRFIXED|VTEXTFIXED,	    	&DEFIFSVAR,	    None ))),
@@ -475,6 +492,12 @@ pub fn export_cmd(argc:i32, argv: Vec<String>) {
     }
 }
 
+
+
+pub fn unsetvar(name: &str) {
+    setvar(name, None, 0);
+}
+
 /*
  * The "local" command.
  */
@@ -535,7 +558,7 @@ pub fn make_local(name: &str,flags:i32) -> Result<(),VarError>{
     }
 
     local_var.var = Some(var.unwrap().clone());
-    LOCALVAR_STACK.lock().unwrap().push(Arc::new(Mutex::new(local_var)));
+    LOCALVAR_STACK.lock().unwrap().last().unwrap().insert(local_var.get_key(),local_var);
 
     Ok(())
 }
@@ -547,9 +570,13 @@ pub fn make_local(name: &str,flags:i32) -> Result<(),VarError>{
  */
 pub fn pop_local_vars() {
     
-    while LOCALVAR_STACK.lock().unwrap().len() != 0 {
-        let local_var = LOCALVAR_STACK.lock().unwrap().pop();
-        let var = local_var.unwrap().lock().unwrap().var;
+
+    //block Interrupts
+    let local_var_stack = & LOCALVAR_STACK.lock().unwrap().pop().unwrap();
+
+    for local_var in local_var_stack.drain() {
+        let local_var = local_var.1;
+        let var = local_var.var;
         
         let output = match &var {
             None => "-".to_owned(),
@@ -559,14 +586,33 @@ pub fn pop_local_vars() {
         trace!("poplocalvar{}\n",output);
         match &var {
             None => {
-
+                let temp_chars = local_var.text.chars().collect::<Vec<char>>();
+                //free the local_var text
+                unsafe {
+                    for i in 0..options::OPTLIST.len() {
+                        options::OPTLIST[i] = temp_chars[i];
+                    }
+                }
+                options::opts_changed();
             },
             Some(var) => {
-                if local_var.unwrap().lock().unwrap().flags == VUNSET {
-
+                if local_var.flags == VUNSET {
+                    var.lock().unwrap().flags &= !(VSTRFIXED|VSTACK);
+                    let var_text = var.lock().unwrap().text;
+                    unsetvar(&var_text);
                 }
                 else {
-                    
+                    match var.lock().unwrap().func {
+                        None => (),
+                        Some(func) => func = tempfunc,
+                    }
+
+                    if var.lock().unwrap().flags & (VTEXTFIXED|VSTACK) == 0 {
+                        //free var.text
+                    }
+
+                    var.lock().unwrap().flags = local_var.flags;
+                    var.lock().unwrap().text = local_var.text;
                 }
 
             },
@@ -575,4 +621,118 @@ pub fn pop_local_vars() {
         }
     }
 
+    //unblock interrupts
 }
+
+
+/*
+ * Create a new localvar environment.
+ */
+
+pub fn push_local_vars(push: bool) -> Option<Box<HashMap<String,LocalVar>>> {
+    
+    if !push {
+        return match LOCALVAR_STACK.lock().unwrap().last() {
+            None => None,
+            Some(val) => Some(*Box::new(*val)), 
+        };
+    }
+    //block Interrupts
+
+    LOCALVAR_STACK.lock().unwrap().push(Box::new(HashMap::new()));
+    
+    //unblock interrupts
+
+   return Some(*LOCALVAR_STACK.lock().unwrap().last().unwrap()); 
+}
+
+pub fn unwind_local_vars(level: usize) {
+
+    while LOCALVAR_STACK.lock().unwrap().len() -1 != level {
+        pop_local_vars();
+    }
+}
+
+
+/*
+ * The unset builtin command.  We unset the function before we unset the
+ * variable to allow a function to be unset when there is a readonly variable
+ * with the same name.
+ */
+
+pub fn unset_cmd(argc:i32, argv: Vec<String>) -> i32 {
+    
+    let flag: u32;
+    let i = options::nextopt("vf");
+    while i != None {
+        flag = i.unwrap() as u32;
+        i = options::nextopt("vf");
+    }
+    
+    unsafe {
+        for arg in options::ARGPOINTER.iter() {
+            if *arg == None {
+                break;
+            }
+            if char::from_u32(flag) != Some('f') {
+                unsetvar(&arg.unwrap())
+            }
+            if char::from_u32(flag) != Some('v') {
+                exec::unset_func(*arg)
+            }
+        }
+    }
+
+    return 0;
+}
+
+
+/*
+ * Compares two strings up to the first = or '\0'.  The first
+ * string must be terminated by '='; the second may be terminated by
+ * either '=' or '\0'.
+ */
+
+fn varcmp(left: &str, right:&str) -> usize {
+    
+    let r;
+    let l;
+    
+    let lt = left.chars().collect::<Vec<char>>();
+    let rt = right.chars().collect::<Vec<char>>();
+    for i in 0..left.len() {
+        l = lt[i];
+        r = rt[i];
+        if l == '=' {
+            break;
+        }
+    }
+    let c;
+    let d;
+
+    if l == '=' {
+        c = 0;
+    }
+    else {
+        c = l as usize;
+    }
+    
+    if r == '=' {
+        d = 0;
+    }
+    else {
+        d = r as usize;
+    }
+    
+    return c - d;
+}
+
+#[inline]
+pub fn varequal(a: &str, b: &str) -> bool {
+    if varcmp(a, b) != 0 {
+        return false
+    }
+    true
+}
+
+
