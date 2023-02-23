@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap,HashMap};
 use std::env;
 use std::{error::Error, fmt};
 use crate::mail;
@@ -54,8 +54,15 @@ impl Var {
         Var {flags: flags, text: text.to_string(), func: func }
     }
 
-    pub fn get_val(&self, index: usize) -> &str {
+    pub fn get_val_index(&self, index: usize) -> &str {
         self.text.get(index..).unwrap()
+    }
+    pub fn get_val(&self) -> Option<String> {
+        let pos = match self.text.find("=") {
+            None => return None,
+            Some(pos) => pos + 1 ,
+        };
+        Some(self.text.get(pos..).unwrap().to_string())
     }
 
     pub fn get_key(&self) -> String {
@@ -91,26 +98,26 @@ struct LocalVarList {
 }
 
 static mut LINENUM: usize = 0;
-const DEFOPTINDVAR: &str = "OPTIND=1";
-const DEFPATHVAR: &str = "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
-const DEFIFSVAR: &str = "IFS= \t\n";
-const LINENOVAR: &str = "LINENO=";
 lazy_static! {
+    static ref DEFOPTINDVAR: String = "OPTIND=1".to_string();
+    static ref DEFPATHVAR: String = "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin".to_string();
+    static ref DEFIFSVAR: String = "IFS= \t\n".to_string();
+    static ref LINENOVAR: String = "LINENO=".to_string();
     pub static ref LOCALVARS: HashMap<String, LocalVar> = HashMap::new();
-    pub static ref VARTAB: Mutex<HashMap<String, Arc<Mutex<Var>>>> = Mutex::new(HashMap::new());
+    pub static ref VARTAB: Mutex<BTreeMap<String, Arc<Mutex<Var>>>> = Mutex::new(BTreeMap::new());
     pub static ref VARINIT: Vec<Arc<Mutex<Var>>> = vec![
-	Arc::new(Mutex::new(Var::new(VSTRFIXED|VTEXTFIXED|VUNSET,   	"ATTY",	    None ))),
-	Arc::new(Mutex::new(Var::new( 	VSTRFIXED|VTEXTFIXED,		    DEFIFSVAR,	    None ))),
-	Arc::new(Mutex::new(Var::new( 	VSTRFIXED|VTEXTFIXED|VUNSET,	"MAIL",	    Some(mail::changemail) ))),
-	Arc::new(Mutex::new(Var::new( 	VSTRFIXED|VTEXTFIXED|VUNSET,	"MAILPATH",	Some(mail::changemail) ))),
-	Arc::new(Mutex::new(Var::new( 	VSTRFIXED|VTEXTFIXED,		    DEFOPTINDVAR,	    Some(exec::changepath) ))),
-	Arc::new(Mutex::new(Var::new( 	VSTRFIXED|VTEXTFIXED,		    "PS1=$ ",	    None ))),
-	Arc::new(Mutex::new(Var::new( 	VSTRFIXED|VTEXTFIXED,		    "PS2=> ",	    None ))),
-	Arc::new(Mutex::new(Var::new( 	VSTRFIXED|VTEXTFIXED,		    "PS4=+ ",	    None ))),
-	Arc::new(Mutex::new(Var::new( 	VSTRFIXED|VTEXTFIXED,		    DEFOPTINDVAR,	Some(options::getoptsreset) ))),
-	Arc::new(Mutex::new(Var::new( 	VSTRFIXED|VTEXTFIXED,		    LINENOVAR,	    None ))),
-	Arc::new(Mutex::new(Var::new( 	VSTRFIXED|VTEXTFIXED|VUNSET,	"TERM",	    None ))),
-	Arc::new(Mutex::new(Var::new( 	VSTRFIXED|VTEXTFIXED|VUNSET,	"HISTSIZE",	Some(myhistoryedit::sethistsize) ))),
+        Arc::new(Mutex::new(Var::new(VSTRFIXED|VTEXTFIXED|VUNSET,   	"ATTY",	    None ))),
+        Arc::new(Mutex::new(Var::new( 	VSTRFIXED|VTEXTFIXED,	    	&DEFIFSVAR,	    None ))),
+        Arc::new(Mutex::new(Var::new( 	VSTRFIXED|VTEXTFIXED|VUNSET,	"MAIL",	    Some(mail::changemail) ))),
+        Arc::new(Mutex::new(Var::new( 	VSTRFIXED|VTEXTFIXED|VUNSET,	"MAILPATH",	Some(mail::changemail) ))),
+        Arc::new(Mutex::new(Var::new( 	VSTRFIXED|VTEXTFIXED,		    &DEFOPTINDVAR,	    Some(exec::changepath) ))),
+        Arc::new(Mutex::new(Var::new( 	VSTRFIXED|VTEXTFIXED,		    "PS1=$ ",	    None ))),
+        Arc::new(Mutex::new(Var::new( 	VSTRFIXED|VTEXTFIXED,		    "PS2=> ",	    None ))),
+        Arc::new(Mutex::new(Var::new( 	VSTRFIXED|VTEXTFIXED,		    "PS4=+ ",	    None ))),
+        Arc::new(Mutex::new(Var::new( 	VSTRFIXED|VTEXTFIXED,		    &DEFOPTINDVAR,	Some(options::getoptsreset) ))),
+        Arc::new(Mutex::new(Var::new( 	VSTRFIXED|VTEXTFIXED,		&LINENOVAR,	    None ))),
+        Arc::new(Mutex::new(Var::new( 	VSTRFIXED|VTEXTFIXED|VUNSET,	"TERM",	    None ))),
+        Arc::new(Mutex::new(Var::new( 	VSTRFIXED|VTEXTFIXED|VUNSET,	"HISTSIZE",	Some(myhistoryedit::sethistsize) ))),
 ];
 
     pub static ref VATTY: Arc<Mutex<Var>> = VARINIT[0].clone();
@@ -135,7 +142,7 @@ lazy_static! {
 
 macro_rules! ifsval {
     () => {
-        VIFS.lock().unwrap()get(4)
+        VIFS.lock().unwrap().get_val_index(4)
     };
 }
 macro_rules! ifsset {
@@ -145,52 +152,52 @@ macro_rules! ifsset {
 }
 macro_rules! mailval {
     () => {
-        VMAIL.lock().unwrap()get(5)
+        VMAIL.lock().unwrap().get_val_index(5)
     };
 }
 macro_rules! mpathval {
     () => {
-        VMPATH.lock().unwrap()get(9)
+        VMPATH.lock().unwrap().get_val_index(9)
     };
 }
 macro_rules! pathval {
     () => {
-        VPATH.lock().unwrap()get(5)
+        VPATH.lock().unwrap().get_val_index(5)
     };
 }
 macro_rules! ps1val {
     () => {
-        VPS1.lock().unwrap()get(4)
+        VPS1.lock().unwrap().get_val_index(4)
     };
 }
 macro_rules! ps2val {
     () => {
-        VPS2.lock().unwrap()get(4)
+        VPS2.lock().unwrap().get_val_index(4)
     };
 }
 macro_rules! ps4val {
     () => {
-        VPS4.lock().unwrap()get(4)
+        VPS4.lock().unwrap().get_val_index(4)
     };
 }
 macro_rules! optindval {
     () => {
-        VOPTIND.lock().unwrap()get(7)
+        VOPTIND.lock().unwrap().get_val_index(7)
     };
 }
 macro_rules! linenumval {
     () => {
-        VLINENUM.lock().unwrap()get(7)
+        VLINENUM.lock().unwrap().get_val_index(7)
     };
 }
 macro_rules! histsizevall {
     () => {
-        VHISTSIZE.lock().unwrap()get(9)
+        VHISTSIZE.lock().unwrap().get_val_index(9)
     };
 }
 macro_rules! termval {
     () => {
-        VTERM.lock().unwrap()get(5)
+        VTERM.lock().unwrap().get_val_index(5)
     };
 }
 macro_rules! attyset {
@@ -204,16 +211,26 @@ macro_rules! mpathset {
     };
 }
 
-pub fn init() {
+pub fn init() -> Result<(),VarError>{
     
     initvar();
+    // add environment variables to vars
+    for var in env::vars() {
+        let temp_var = var.0 + "=" + &var.1;
+        setvareq(&temp_var, VEXPORT|VTEXTFIXED)?;
+    } 
     
+
+    setvareq(&DEFIFSVAR, VTEXTFIXED)?; 
+    setvareq(&DEFOPTINDVAR, VTEXTFIXED)?;
+
     let p = match env::var("PWD") {
         Ok(key) => Some(key),
         Err(_) => None,
     };
 
-    cd::setpwd(p,false)
+    cd::setpwd(p,false);
+    return Ok(());
 }
 
 
@@ -239,6 +256,7 @@ pub fn initvar() {
 }
 
 pub fn setvar(name: &str,val: Option<&str>,flags: i32) -> Result<Option<Arc<Mutex<Var>>>,VarError> {
+    let mut flags = flags;
     let name_end: usize = name.len();
     if name_end == 0 {
         panic!("{}: bad variable name", name_end);
@@ -270,11 +288,12 @@ pub fn setvar(name: &str,val: Option<&str>,flags: i32) -> Result<Option<Arc<Mute
  */
 fn setvareq(var_set: &str, flags: i32) -> Result<Option<Arc<Mutex<Var>>>,VarError> {
 
+    let mut flags = flags;
     flags |= VEXPORT & (( (1 - super::aflag!())) - 1);
 
-    let var: Option<&Arc<Mutex<Var>>> = findvar(var_set);
+    let mut var: Option<Arc<Mutex<Var>>> = findvar(var_set);
     
-    match var {
+    match &var {
         Some(var) => {
             if var.lock().unwrap().flags & VREADONLY == VREADONLY {
                 if var.lock().unwrap().flags & VNOSAVE == VNOSAVE {
@@ -286,7 +305,7 @@ fn setvareq(var_set: &str, flags: i32) -> Result<Option<Arc<Mutex<Var>>>,VarErro
                 return Err(VarError::new(&msg));  
             } 
             if flags & VNOSET == VNOSET {
-                return Ok(Some(*var));
+                return Ok(Some(var.clone()));
             }
             if var.lock().unwrap().check_func() {
                 var.lock().unwrap().func = Some(tempfunc)
@@ -318,17 +337,17 @@ fn setvareq(var_set: &str, flags: i32) -> Result<Option<Arc<Mutex<Var>>>,VarErro
                 return Ok(None); 
             }
             // not found
-            var = Some(&Arc::new(Mutex::new(Var::new(0, "",None))));
+            var = Some(Arc::new(Mutex::new(Var::new(0, "",None))));
         },
     }
     if !(flags &(VTEXTFIXED|VSTACK|VNOSAVE) == (VTEXTFIXED|VSTACK|VNOSAVE)) {
         //put String on the stack
     }
 
-    var.unwrap().lock().unwrap().text = var_set.to_string();
-    var.unwrap().lock().unwrap().flags = flags;
-    let ret_val = *var.unwrap();
-    Ok(Some(ret_val))
+    var.as_mut().unwrap().lock().unwrap().text = var_set.to_string();
+    var.as_mut().unwrap().lock().unwrap().flags = flags;
+    let ret_val = var;
+    Ok(ret_val)
 }
 
 
@@ -336,27 +355,40 @@ pub fn tempfunc(temp: &str) {
 
 }
 
-fn findvar(var_set: &str) -> Option<&Arc<Mutex<Var>>> {
+fn findvar(var_set: &str) -> Option<Arc<Mutex<Var>>> {
     let var;
     
     let pos = match var_set.find("=") {
         None => var_set.len(),
         Some(pos) => pos,
     };
+    
+    let vartable = VARTAB.lock().unwrap();
 
-    var = VARTAB.lock().unwrap().get(var_set.get(..pos).unwrap());
-
-    var
+    var = vartable.get(var_set.get(..pos).unwrap());
+    
+    match var {
+        None => return None,
+        Some(var) => return Some(var.clone()),
+    }
     
 }
 
-fn lookupvar(name: &str) -> Option<&str> {
-    None
+/*
+ * Find the value of a variable.  Returns NULL if not set.
+ */
+fn lookupvar(name: &str) -> Option<String> {
+    
+    let result = findvar(name)?; 
+    
+    return result.lock().unwrap().get_val();
+
+    
 }
 
 
 #[inline]
-pub fn bltinlookup(name: &str) -> Option<&str> {
+pub fn bltinlookup(name: &str) -> Option<String> {
     lookupvar(name)
 }
 

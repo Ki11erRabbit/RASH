@@ -13,46 +13,49 @@ pub static mut ARGLIST_INDEX: usize = 0;
 pub static mut OPTPTR: Option<String> = None;
 pub static mut OPTION_ARG: Option<String> = None;
 
+lazy_static!{
 
-pub const OPTNAMES: Vec<&str> = vec![
-	"errexit",
-	"noglob",
-	"ignoreeof",
-	"interactive",
-	"monitor",
-	"noexec",
-	"stdin",
-	"xtrace",
-	"verbose",
-	"vi",
-	"emacs",
-	"noclobber",
-	"allexport",
-	"notify",
-	"nounset",
-	"nolog",
-	"debug",
-];
+    pub static ref OPTNAMES: Vec<&'static str> = vec![
+        "errexit",
+        "noglob",
+        "ignoreeof",
+        "interactive",
+        "monitor",
+        "noexec",
+        "stdin",
+        "xtrace",
+        "verbose",
+        "vi",
+        "emacs",
+        "noclobber",
+        "allexport",
+        "notify",
+        "nounset",
+        "nolog",
+        "debug",
+    ];
 
-pub const OPTLETTERS: Vec<char> = vec![
-	'e',
-	'f',
-	'I',
-	'i',
-	'm',
-	'n',
-	's',
-	'x',
-	'v',
-	'V',
-	'E',
-	'C',
-	'a',
-	'b',
-	'u',
-	0 as char,
-	0 as char,
-];
+    pub static ref OPTLETTERS: Vec<char> = vec![
+        'e',
+        'f',
+        'I',
+        'i',
+        'm',
+        'n',
+        's',
+        'x',
+        'v',
+        'V',
+        'E',
+        'C',
+        'a',
+        'b',
+        'u',
+        0 as char,
+        0 as char,
+    ];
+
+}
 
 pub static mut OPTLIST: [i32;17] = [0;17];
 
@@ -164,38 +167,42 @@ pub fn getoptsreset(value: &str) {
 
 }
 
-unsafe fn get_next_in_arglist() -> Option<String> {
+unsafe fn get_next_in_arglist(arg: &mut Option<String> ) -> Option<String> {
     if ARGLIST_INDEX > ARGLIST.len() {
+        *arg = None;
         return None;
     }
-    let ret = Some(ARGLIST[ARGLIST_INDEX].to_string());
+    let arg = Some(ARGLIST[ARGLIST_INDEX].to_string());
     ARGLIST_INDEX += 1;
-    ret
+    arg
 }
 
 pub fn nextopt(optstring: &str) -> Option<char> {
-    let p: Option<String>;
-    let q: &str;
+    let mut p: Option<String>;
+    let mut q: String;
     let c: char;
-
-    if unsafe { p = OPTPTR; p } == None || p == None {
+    
+    unsafe {
+        p = OPTPTR.clone();
+    }
+    if p == None || p == None {
         unsafe { 
             p = Some(ARGLIST[ARGLIST_INDEX].to_string()); 
         }
-        if p == None || p.unwrap().get(..1).unwrap() == "-" || p.unwrap().len() == 1 {
+        if p == None || p.as_ref().unwrap().get(..1).unwrap() == "-" || p.as_ref().unwrap().len() == 1 {
             return None;
         }
         unsafe {
             ARGLIST_INDEX += 1;
         }
-        if p.unwrap().len() == 1 && p.unwrap().get(..1).unwrap() == "-" {
+        if p.as_ref().unwrap().len() == 1 && p.as_ref().unwrap().get(..1).unwrap() == "-" {
             return None;
         }
     }
     
-    c = p.unwrap().chars().collect::<Vec<char>>()[1];
+    c = p.as_ref().unwrap().chars().collect::<Vec<char>>()[1];
 
-    q = optstring;
+    q = optstring.to_string();
     while q.chars().collect::<Vec<char>>()[0] != c {
         if q.len() == 0 {
             eprintln!("Illegal option -{}",c);
@@ -204,11 +211,11 @@ pub fn nextopt(optstring: &str) -> Option<char> {
             let mut s = q.to_string();
             s.remove(0);
             s.remove(0);
-            q = s.as_str();
+            q = s;
         }
     }
     if q.chars().collect::<Vec<char>>()[1] == ':' {
-        if p == None && unsafe { p = get_next_in_arglist(); p } == None {
+        if p == None && unsafe { get_next_in_arglist(&mut p) == None } {
             eprintln!("No arg for -{}", c);
         }
         unsafe {

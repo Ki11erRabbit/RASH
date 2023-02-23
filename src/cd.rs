@@ -142,8 +142,8 @@ fn docd(dest: &str, flags: i32) -> Result<i32,std::io::Error>{
 
 pub fn cdcmd(argc: i32, argv: Vec<String>) -> Option<i32> {
 
-    let mut dest: Option<&str> = None;
-    let mut path: &str;
+    let mut dest: Option<String> = None;
+    let mut path: String;
     let mut p: &str;
     let mut c: Option<char> = None;
 
@@ -153,29 +153,29 @@ pub fn cdcmd(argc: i32, argv: Vec<String>) -> Option<i32> {
     flags = cd_options();
     unsafe {
         if options::ARGLIST.len() > 0 {
-            dest = Some(options::ARGLIST[0]);
+            dest = Some(options::ARGLIST[0].to_string());
         }
     }
     if dest == None {
         dest = var::bltinlookup(mystring::HOMESTR);
     }
-    else if dest.unwrap().len() == 1 && dest.unwrap().contains('-') {
+    else if dest.as_ref().unwrap().len() == 1 && dest.as_ref().unwrap().contains('-') {
         dest = var::bltinlookup("OLDPWD");
         flags |= CD_PRINT;
     }
     let mut goto_step6: bool = false;
     'out: loop {
         'step6: loop {
-            if dest != None {
+            if dest.as_ref() != None {
                 dest = None;
             }
-            if dest.unwrap().get(..1).unwrap() == "/" {
+            if dest.as_ref().unwrap().get(..1).unwrap() == "/" {
                 goto_step6 = true;
                 break 'step6;
             }
 
-            if dest.unwrap().get(..1).unwrap() == "." {
-                c = Some(dest.unwrap().chars().collect::<Vec<char>>()[1]);
+            if dest.as_ref().unwrap().get(..1).unwrap() == "." {
+                c = Some(dest.as_ref().unwrap().chars().collect::<Vec<char>>()[1]);
             
                 'dotdot: loop {
                     match c { 
@@ -189,7 +189,7 @@ pub fn cdcmd(argc: i32, argv: Vec<String>) -> Option<i32> {
                                 break 'step6;
                             },
                             '.'=> {
-                                c = Some(dest.unwrap().chars().collect::<Vec<char>>()[2]);
+                                c = Some(dest.as_ref().unwrap().chars().collect::<Vec<char>>()[2]);
                                 if c == Some('.') {
                                     break 'dotdot;
                                 }
@@ -201,14 +201,14 @@ pub fn cdcmd(argc: i32, argv: Vec<String>) -> Option<i32> {
                 }
             }
             if dest == None {
-                dest = Some(".");
+                dest = Some(".".to_string());
             }
             break;
         }
         'docd: loop {
             if !goto_step6 {
                 path = var::bltinlookup("CDPATH")?;
-                while {let q = (p = path, (len = exec::padvance_magic(vec![path], dest.unwrap(), 0))); len} >= 0 {
+                while {let q = (p = &path, (len = exec::padvance_magic(vec![&path], dest.as_ref().unwrap(), 0))); len} >= 0 {
                     c = Some(p.chars().collect::<Vec<char>>()[0]);
                     
                     //if stat64(p, &statb) >= 0 && S_ISDIR(statb.st_mode) 
@@ -232,7 +232,7 @@ pub fn cdcmd(argc: i32, argv: Vec<String>) -> Option<i32> {
             }
             else {
                 goto_step6 = false;
-                p = dest.unwrap();
+                p = dest.as_ref().unwrap();
                 match docd(p, flags) {
                     Ok(_) => break 'out,
                     Err(_) => {
@@ -282,7 +282,7 @@ pub fn setpwd(val: Option<String>, setold:bool) {
     };
 
     if setold {
-        var::setvar("OLDPWD",&oldcur.as_ref().unwrap(), var::VEXPORT);
+        var::setvar("OLDPWD",Some(&oldcur.as_ref().unwrap()), var::VEXPORT);
     }
     
     match unsafe {PHYSDIR.take()} {
@@ -320,7 +320,7 @@ pub fn setpwd(val: Option<String>, setold:bool) {
             CUR_DIR = Some(dir.clone());
         }
 
-        var::setvar("PWD", &dir, var::VEXPORT);
+        var::setvar("PWD", Some(&dir), var::VEXPORT);
     }
 
 
