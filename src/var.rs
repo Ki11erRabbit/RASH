@@ -7,6 +7,8 @@ use crate::options::OPTLIST;
 use crate::options;
 use crate::myhistoryedit;
 use crate::cd;
+use super::trace;
+use crate::show::{tracefn, TRACEFILE};
 use lazy_static::lazy_static;
 use std::sync::{Mutex, Arc};
 use nix::unistd::geteuid;
@@ -86,16 +88,26 @@ impl Var {
     }
 }
 
+impl fmt::Display for Var {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.text )
+    }
+}
+
 #[derive(Clone)]
 pub struct LocalVar {
-    var: Var,           // the variable that was made local
+    var: Option<Arc<Mutex<Var>>>,           // the variable that was made local
     flags: i32,         // saved flags
-    text: &'static str, // saved text
+    text: String, // saved text
 }
 
-struct LocalVarList {
+impl LocalVar {
 
+    pub fn new(flags:i32, text: &str, var: Option<Arc<Mutex<Var>>>) -> LocalVar {
+        LocalVar {flags: flags, text: text.to_string(), var: var }
+    }
 }
+
 
 static mut LINENUM: usize = 0;
 lazy_static! {
@@ -105,6 +117,7 @@ lazy_static! {
     static ref LINENOVAR: String = "LINENO=".to_string();
     pub static ref LOCALVARS: HashMap<String, LocalVar> = HashMap::new();
     pub static ref VARTAB: Mutex<BTreeMap<String, Arc<Mutex<Var>>>> = Mutex::new(BTreeMap::new());
+    pub static ref LOCALVAR_STACK: Mutex<Vec<Arc<Mutex<LocalVar>>>> = Mutex::new(Vec::new());
     pub static ref VARINIT: Vec<Arc<Mutex<Var>>> = vec![
         Arc::new(Mutex::new(Var::new(VSTRFIXED|VTEXTFIXED|VUNSET,   	"ATTY",	    None ))),
         Arc::new(Mutex::new(Var::new( 	VSTRFIXED|VTEXTFIXED,	    	&DEFIFSVAR,	    None ))),
@@ -255,11 +268,18 @@ pub fn initvar() {
 
 }
 
-pub fn setvar(name: &str,val: Option<&str>,flags: i32) -> Result<Option<Arc<Mutex<Var>>>,VarError> {
+pub fn set_var_int(name: &str, val: isize, flags: i32) -> Result<isize,VarError> {
+    setvar(name,Some(val.to_string()),flags)?;
+    Ok(val)
+}
+
+
+pub fn setvar(name: &str,val: Option<String>,flags: i32) -> Result<Option<Arc<Mutex<Var>>>,VarError> {
     let mut flags = flags;
     let name_end: usize = name.len();
     if name_end == 0 {
-        panic!("{}: bad variable name", name_end);
+        let msg = format!("{}: bad variable name", name_end);
+        return Err(VarError::new(&msg));
     }
     let mut val_len = 0;
     if val == None {
@@ -268,9 +288,9 @@ pub fn setvar(name: &str,val: Option<&str>,flags: i32) -> Result<Option<Arc<Mute
     else {
         val_len = val.unwrap().len();
     }
-    let mut set_var: String = name.to_string() + "=";
+    let mut set_var: String = name.to_string();
     match val {
-        Some(val) => set_var = set_var + val,
+        Some(val) => set_var = set_var + "=" + &val,
         None => (),
     }
 
@@ -289,7 +309,7 @@ pub fn setvar(name: &str,val: Option<&str>,flags: i32) -> Result<Option<Arc<Mute
 fn setvareq(var_set: &str, flags: i32) -> Result<Option<Arc<Mutex<Var>>>,VarError> {
 
     let mut flags = flags;
-    flags |= VEXPORT & (( (1 - super::aflag!())) - 1);
+    flags |= VEXPORT & (( (1 - super::aflag!() as i32)) - 1);
 
     let mut var: Option<Arc<Mutex<Var>>> = findvar(var_set);
     
@@ -392,3 +412,167 @@ pub fn bltinlookup(name: &str) -> Option<String> {
     lookupvar(name)
 }
 
+/*
+ * POSIX requires that 'set' (but not export or readonly) output the
+ * variables in lexicographic order - by the locale's collating order (sigh).
+ * Maybe we could keep them in an ordered balanced binary tree
+ * instead of hashed lists.
+ * For now just roll 'em through qsort for printing...
+ *
+ * haha in rust I can just roll with a BTreeMap to solve this problem
+ */
+pub fn showvars() {
+    
+    for (key,var) in VARTAB.lock().unwrap().iter() {
+        println!("{}",var.lock().unwrap());
+    }
+
+}
+
+pub fn export_cmd(argc:i32, argv: Vec<String>) {
+    
+    let flag = if argv[0].chars().collect::<Vec<char>>()[0] == 'r' { VREADONLY } else { VEXPORT };
+    
+    let next_opt: i32 = match options::nextopt("p") {
+        Some(opt) => opt as i32 - 'p' as i32,
+        None => 0 - 'p' as i32,
+    };
+    let mut name;
+    unsafe {
+        name = &options::ARGPOINTER[0];
+    }
+    let mut pos = 0;
+    let mut val;
+    if next_opt != 0 && *name != None {
+        loop {
+            if name.as_ref().unwrap().contains("=") {
+                val = match name.as_ref().unwrap().find('=') {
+                    Some(pos) => Some(name.as_ref().unwrap().get(pos+1..).unwrap().to_string()),
+                    None => None,
+                };
+                setvar(name.as_ref().unwrap(), val, flag);
+            }
+            else {
+                let var = findvar(&name.as_ref().unwrap());
+                match var {
+                    Some(var) => var.lock().unwrap().flags |= flag,
+                    None => {
+                        setvar(&name.as_ref().unwrap(), val, flag);
+                    },
+                }
+            }
+
+            unsafe {
+                if pos < options::ARGPOINTER.len() {
+                    pos += 1;
+                    name = &options::ARGPOINTER[pos];
+                }
+                else {
+                    break;
+                }
+            }
+        }
+    }
+}
+
+/*
+ * The "local" command.
+ */
+
+pub fn local_cmd(argc:i32, argv: Vec<String>) -> Result<(),VarError> {
+    
+
+    if LOCALVAR_STACK.lock().unwrap().len() == 0 {
+        return Err(VarError::new("not in a function"));
+    }
+    
+    let argv;
+    unsafe {
+        argv = &options::ARGPOINTER;
+    }
+
+    for arg in argv.iter() {
+        make_local(&arg.unwrap(),0);
+    }
+    
+    Ok(())
+}
+
+pub fn make_local(name: &str,flags:i32) -> Result<(),VarError>{
+    
+    let local_var: LocalVar;
+    let mut var;
+    
+    if name.chars().collect::<Vec<char>>()[0] == '-' && name.len() == 1 {
+        unsafe {
+            local_var.text = options::OPTLIST.iter().collect::<String>();
+            var = None;
+        }
+    }
+    else {
+        var = findvar(name);
+        let equal = name.contains("=");
+        match &mut var {
+            None => {
+                if equal {
+                    var = setvareq(name, VSTRFIXED | flags)?;
+                }
+                else {
+                    var = setvar(name,None, VSTRFIXED | flags)?;
+                }
+                local_var.flags = VUNSET;
+            },
+            Some(var) => {
+                let temp_var = var.lock().unwrap();
+                local_var.text = temp_var.text;
+                local_var.flags = temp_var.flags;
+                temp_var.flags |= VSTRFIXED|VTEXTFIXED;
+                if equal {
+                    setvareq(name, flags)?;
+                }
+            }
+        }
+    }
+
+    local_var.var = Some(var.unwrap().clone());
+    LOCALVAR_STACK.lock().unwrap().push(Arc::new(Mutex::new(local_var)));
+
+    Ok(())
+}
+
+
+/*
+ * Called after a function returns.
+ * Interrupts must be off.
+ */
+pub fn pop_local_vars() {
+    
+    while LOCALVAR_STACK.lock().unwrap().len() != 0 {
+        let local_var = LOCALVAR_STACK.lock().unwrap().pop();
+        let var = local_var.unwrap().lock().unwrap().var;
+        
+        let output = match &var {
+            None => "-".to_owned(),
+            Some(val) => val.lock().unwrap().text,
+        };
+
+        trace!("poplocalvar{}\n",output);
+        match &var {
+            None => {
+
+            },
+            Some(var) => {
+                if local_var.unwrap().lock().unwrap().flags == VUNSET {
+
+                }
+                else {
+                    
+                }
+
+            },
+
+
+        }
+    }
+
+}

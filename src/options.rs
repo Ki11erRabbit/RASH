@@ -12,7 +12,7 @@ pub static mut ARGLIST: Vec<&str> = Vec::new();
 pub static mut ARGLIST_INDEX: usize = 0;
 pub static mut OPTPTR: Option<String> = None;
 pub static mut OPTION_ARG: Option<String> = None;
-
+pub static mut ARGPOINTER: Vec<Option<String>> = Vec::new();
 lazy_static!{
 
     pub static ref OPTNAMES: Vec<&'static str> = vec![
@@ -57,7 +57,7 @@ lazy_static!{
 
 }
 
-pub static mut OPTLIST: [i32;17] = [0;17];
+pub static mut OPTLIST: [char;17] = [0 as char ;17];
 
 #[macro_export]
 macro_rules! eflag {
