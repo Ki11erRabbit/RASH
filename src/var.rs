@@ -286,12 +286,12 @@ pub fn initvar() {
 }
 
 pub fn set_var_int(name: &str, val: isize, flags: i32) -> Result<isize,VarError> {
-    setvar(name,Some(val.to_string()),flags)?;
+    setvar(name,&Some(val.to_string()),flags)?;
     Ok(val)
 }
 
 
-pub fn setvar(name: &str,val: Option<String>,flags: i32) -> Result<Option<Arc<Mutex<Var>>>,VarError> {
+pub fn setvar(name: &str,val: &Option<String>,flags: i32) -> Result<Option<Arc<Mutex<Var>>>,VarError> {
     let mut flags = flags;
     let name_end: usize = name.len();
     if name_end == 0 {
@@ -299,11 +299,11 @@ pub fn setvar(name: &str,val: Option<String>,flags: i32) -> Result<Option<Arc<Mu
         return Err(VarError::new(&msg));
     }
     let mut val_len = 0;
-    if val == None {
+    if *val == None {
         flags |= VUNSET;
     }
     else {
-        val_len = val.unwrap().len();
+        val_len = val.as_ref().unwrap().len();
     }
     let mut set_var: String = name.to_string();
     match val {
@@ -459,7 +459,7 @@ pub fn export_cmd(argc:i32, argv: Vec<String>) {
         name = &options::ARGPOINTER[0];
     }
     let mut pos = 0;
-    let mut val;
+    let mut val = None;
     if next_opt != 0 && *name != None {
         loop {
             if name.as_ref().unwrap().contains("=") {
@@ -467,14 +467,14 @@ pub fn export_cmd(argc:i32, argv: Vec<String>) {
                     Some(pos) => Some(name.as_ref().unwrap().get(pos+1..).unwrap().to_string()),
                     None => None,
                 };
-                setvar(name.as_ref().unwrap(), val, flag);
+                setvar(name.as_ref().unwrap(), &val, flag);
             }
             else {
                 let var = findvar(&name.as_ref().unwrap());
                 match var {
                     Some(var) => var.lock().unwrap().flags |= flag,
                     None => {
-                        setvar(&name.as_ref().unwrap(), val, flag);
+                        setvar(&name.as_ref().unwrap(), &val, flag);
                     },
                 }
             }
@@ -495,7 +495,7 @@ pub fn export_cmd(argc:i32, argv: Vec<String>) {
 
 
 pub fn unsetvar(name: &str) {
-    setvar(name, None, 0);
+    setvar(name, &None, 0);
 }
 
 /*
@@ -515,7 +515,7 @@ pub fn local_cmd(argc:i32, argv: Vec<String>) -> Result<(),VarError> {
     }
 
     for arg in argv.iter() {
-        make_local(&arg.unwrap(),0);
+        make_local(&arg.as_ref().unwrap(),0);
     }
     
     Ok(())
@@ -523,7 +523,7 @@ pub fn local_cmd(argc:i32, argv: Vec<String>) -> Result<(),VarError> {
 
 pub fn make_local(name: &str,flags:i32) -> Result<(),VarError>{
     
-    let local_var: LocalVar;
+    let mut local_var: LocalVar = LocalVar { var: None, flags: 0, text: "".to_string() };
     let mut var;
     
     if name.chars().collect::<Vec<char>>()[0] == '-' && name.len() == 1 {
@@ -541,13 +541,13 @@ pub fn make_local(name: &str,flags:i32) -> Result<(),VarError>{
                     var = setvareq(name, VSTRFIXED | flags)?;
                 }
                 else {
-                    var = setvar(name,None, VSTRFIXED | flags)?;
+                    var = setvar(name, &None, VSTRFIXED | flags)?;
                 }
                 local_var.flags = VUNSET;
             },
             Some(var) => {
-                let temp_var = var.lock().unwrap();
-                local_var.text = temp_var.text;
+                let mut temp_var = var.lock().unwrap();
+                local_var.text = temp_var.text.clone();
                 local_var.flags = temp_var.flags;
                 temp_var.flags |= VSTRFIXED|VTEXTFIXED;
                 if equal {
@@ -558,7 +558,7 @@ pub fn make_local(name: &str,flags:i32) -> Result<(),VarError>{
     }
 
     local_var.var = Some(var.unwrap().clone());
-    LOCALVAR_STACK.lock().unwrap().last().unwrap().insert(local_var.get_key(),local_var);
+    LOCALVAR_STACK.lock().unwrap().last_mut().unwrap().insert(local_var.get_key(),local_var);
 
     Ok(())
 }
@@ -572,7 +572,7 @@ pub fn pop_local_vars() {
     
 
     //block Interrupts
-    let local_var_stack = & LOCALVAR_STACK.lock().unwrap().pop().unwrap();
+    let local_var_stack = &mut LOCALVAR_STACK.lock().unwrap().pop().unwrap();
 
     for local_var in local_var_stack.drain() {
         let local_var = local_var.1;
@@ -580,7 +580,7 @@ pub fn pop_local_vars() {
         
         let output = match &var {
             None => "-".to_owned(),
-            Some(val) => val.lock().unwrap().text,
+            Some(val) =>  val.lock().unwrap().text.clone(),//TODO remove the clone
         };
 
         trace!("poplocalvar{}\n",output);
@@ -598,13 +598,13 @@ pub fn pop_local_vars() {
             Some(var) => {
                 if local_var.flags == VUNSET {
                     var.lock().unwrap().flags &= !(VSTRFIXED|VSTACK);
-                    let var_text = var.lock().unwrap().text;
+                    let var_text = & var.lock().unwrap().text;
                     unsetvar(&var_text);
                 }
                 else {
                     match var.lock().unwrap().func {
                         None => (),
-                        Some(func) => func = tempfunc,
+                        Some(mut func) => func = tempfunc,
                     }
 
                     if var.lock().unwrap().flags & (VTEXTFIXED|VSTACK) == 0 {
@@ -634,7 +634,7 @@ pub fn push_local_vars(push: bool) -> Option<Box<HashMap<String,LocalVar>>> {
     if !push {
         return match LOCALVAR_STACK.lock().unwrap().last() {
             None => None,
-            Some(val) => Some(*Box::new(*val)), 
+            Some(val) => Some(val.clone()), 
         };
     }
     //block Interrupts
@@ -643,7 +643,7 @@ pub fn push_local_vars(push: bool) -> Option<Box<HashMap<String,LocalVar>>> {
     
     //unblock interrupts
 
-   return Some(*LOCALVAR_STACK.lock().unwrap().last().unwrap()); 
+   return Some(LOCALVAR_STACK.lock().unwrap().last().unwrap().clone()); 
 }
 
 pub fn unwind_local_vars(level: usize) {
@@ -662,8 +662,8 @@ pub fn unwind_local_vars(level: usize) {
 
 pub fn unset_cmd(argc:i32, argv: Vec<String>) -> i32 {
     
-    let flag: u32;
-    let i = options::nextopt("vf");
+    let mut flag: u32 = 0;
+    let mut i = options::nextopt("vf");
     while i != None {
         flag = i.unwrap() as u32;
         i = options::nextopt("vf");
@@ -675,10 +675,10 @@ pub fn unset_cmd(argc:i32, argv: Vec<String>) -> i32 {
                 break;
             }
             if char::from_u32(flag) != Some('f') {
-                unsetvar(&arg.unwrap())
+                unsetvar(&arg.as_ref().unwrap())
             }
             if char::from_u32(flag) != Some('v') {
-                exec::unset_func(*arg)
+                exec::unset_func(arg.clone())
             }
         }
     }
@@ -695,33 +695,33 @@ pub fn unset_cmd(argc:i32, argv: Vec<String>) -> i32 {
 
 fn varcmp(left: &str, right:&str) -> usize {
     
-    let r;
-    let l;
+    let mut r = None;
+    let mut l = None;
     
     let lt = left.chars().collect::<Vec<char>>();
     let rt = right.chars().collect::<Vec<char>>();
     for i in 0..left.len() {
-        l = lt[i];
-        r = rt[i];
-        if l == '=' {
+        l = Some(lt[i]);
+        r = Some(rt[i]);
+        if l == Some('=') {
             break;
         }
     }
     let c;
     let d;
 
-    if l == '=' {
+    if l == Some('=') {
         c = 0;
     }
     else {
-        c = l as usize;
+        c = l.expect("varcmp left empty") as usize;
     }
     
-    if r == '=' {
+    if r == Some('=') {
         d = 0;
     }
     else {
-        d = r as usize;
+        d = r.expect("varcmp right empty") as usize;
     }
     
     return c - d;

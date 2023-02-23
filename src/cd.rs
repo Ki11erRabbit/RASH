@@ -282,7 +282,7 @@ pub fn setpwd(val: Option<String>, setold:bool) {
     };
 
     if setold {
-        var::setvar("OLDPWD",Some(&oldcur.as_ref().unwrap()), var::VEXPORT);
+        var::setvar("OLDPWD", &Some(oldcur.as_ref().unwrap().to_string()), var::VEXPORT);
     }
     
     match unsafe {PHYSDIR.take()} {
@@ -320,7 +320,7 @@ pub fn setpwd(val: Option<String>, setold:bool) {
             CUR_DIR = Some(dir.clone());
         }
 
-        var::setvar("PWD", Some(&dir), var::VEXPORT);
+        var::setvar("PWD", &Some(dir), var::VEXPORT);
     }
 
 
