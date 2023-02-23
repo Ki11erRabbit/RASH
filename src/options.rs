@@ -8,6 +8,7 @@ pub struct ShParam {
 }
 
 
+pub static MINUSC: Option<String> = None;
 pub static mut ARGLIST: Vec<&str> = Vec::new();
 pub static mut ARGLIST_INDEX: usize = 0;
 pub static mut OPTPTR: Option<String> = None;
@@ -62,103 +63,103 @@ pub static mut OPTLIST: [char;17] = [0 as char ;17];
 #[macro_export]
 macro_rules! eflag {
     () => {
-        unsafe { OPTLIST[0] }
+        unsafe { options::OPTLIST[0] }
     };
 }
 #[macro_export]
 macro_rules! fflag {
     () => {
-        unsafe { OPTLIST[1] }
+        unsafe { options::OPTLIST[1] }
     };
 }
 #[macro_export]
 macro_rules! Iflag {
     () => {
-        unsafe { OPTLIST[2] }
+        unsafe { options::OPTLIST[2] }
     };
 }
 #[macro_export]
 macro_rules! iflag {
     () => {
-        unsafe { OPTLIST[3] }
+        unsafe { options::OPTLIST[3] }
     };
 }
 #[macro_export]
 macro_rules! mflag {
     () => {
-        unsafe { OPTLIST[4] }
+        unsafe { options::OPTLIST[4] }
     };
 }
 #[macro_export]
 macro_rules! nfalg {
     () => {
-        unsafe { OPTLIST[5] }
+        unsafe { options::OPTLIST[5] }
     };
 }
 #[macro_export]
 macro_rules! sflag {
     () => {
-        unsafe { OPTLIST[6] }
+        unsafe { options::OPTLIST[6] }
     };
 }
 #[macro_export]
 macro_rules! xflag {
     () => {
-        unsafe { OPTLIST[7] }
+        unsafe { options::OPTLIST[7] }
     };
 }
 #[macro_export]
 macro_rules! vflag {
     () => {
-        unsafe { OPTLIST[8] }
+        unsafe { options::OPTLIST[8] }
     };
 }
 #[macro_export]
 macro_rules! Vflag {
     () => {
-        unsafe { OPTLIST[9] }
+        unsafe { options::OPTLIST[9] }
     };
 }
 #[macro_export]
 macro_rules! Eflag {
     () => {
-        unsafe { OPTLIST[10] }
+        unsafe { options::OPTLIST[10] }
     };
 }
 #[macro_export]
 macro_rules! Cflag {
     () => {
-        unsafe { OPTLIST[11] }
+        unsafe { options::OPTLIST[11] }
     };
 }
 #[macro_export]
 macro_rules! aflag {
     () => {
-        unsafe { OPTLIST[12] }
+        unsafe { options::OPTLIST[12] }
     };
 }
 #[macro_export]
 macro_rules! bflag {
     () => {
-        unsafe { OPTLIST[13] }
+        unsafe { options::OPTLIST[13] }
     };
 }
 #[macro_export]
 macro_rules! uflag {
     () => {
-        unsafe { OPTLIST[14] }
+        unsafe { options::OPTLIST[14] }
     };
 }
 #[macro_export]
 macro_rules! nolog {
     () => {
-        unsafe { OPTLIST[15] }
+        unsafe { options::OPTLIST[15] }
     };
 }
 #[macro_export]
 macro_rules! debug {
     () => {
-        unsafe { OPTLIST[16] }
+        unsafe { options::OPTLIST[16] }
     };
 }
 
@@ -232,3 +233,12 @@ pub fn nextopt(optstring: &str) -> Option<char> {
     }
     Some(c)
 }
+
+pub fn process_args(argc: usize, argv: Vec<String>) -> usize {
+    let mut login = 0;
+
+
+
+    login
+}
+

@@ -414,7 +414,7 @@ fn findvar(var_set: &str) -> Option<Arc<Mutex<Var>>> {
 /*
  * Find the value of a variable.  Returns NULL if not set.
  */
-fn lookupvar(name: &str) -> Option<String> {
+pub fn lookupvar(name: &str) -> Option<String> {
     
     let result = findvar(name)?; 
     
