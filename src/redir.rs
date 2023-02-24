@@ -4,7 +4,12 @@ use std::process;
 use std::mem;
 use std::io;
 use std::os::unix::fs::OpenOptionsExt;
+use crate::nodes::Node;
 
+
+pub struct RedirTable {
+    renamed: [i32;10],
+}
 
 
 pub fn sh_open(path_name: &str, mayfail: i32) -> std::io::Result<i32> {
@@ -53,4 +58,11 @@ pub fn sh_open(path_name: &str, mayfail: i32) -> std::io::Result<i32> {
         };
     }
     
+}
+
+
+pub fn push_redir(redir:Box<Option<Node>>) -> Box<RedirTable> {
+
+    unimplemented!()
+
 }

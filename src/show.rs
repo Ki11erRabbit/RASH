@@ -5,17 +5,29 @@ pub static mut TRACEFILE: Option<File> = None;
 
 #[macro_export]
 macro_rules! trace {
-    ($fmt:literal, $($arg:tt),*) =>  {
+    ($fmt:literal, $($arg:expr),*) =>  {
         let string: String;
         {
         string = format!($fmt, $($arg),*);
     }   
         let tracefile;
         unsafe {
-        tracefile = TRACEFILE.take().unwrap();}
-        tracefn(&tracefile,&string);
+        tracefile = crate::show::TRACEFILE.take().unwrap();}
+        crate::show::tracefn(&tracefile,&string);
         unsafe {
-        TRACEFILE = Some(tracefile);}
+        crate::show::TRACEFILE = Some(tracefile);}
+    };
+    ($fmt:literal) =>  {
+        let string: &str;
+        {
+        string = $fmt;
+    }   
+        let tracefile;
+        unsafe {
+        tracefile = crate::show::TRACEFILE.take().unwrap();}
+        crate::show::tracefn(&tracefile,&string);
+        unsafe {
+        crate::show::TRACEFILE = Some(tracefile);}
     };
 }
 

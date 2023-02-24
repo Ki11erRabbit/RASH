@@ -1,4 +1,4 @@
-
+use std::fmt::Display;
 pub const NCMD: i32 = 0;
 pub const NPIPE: i32 = 1;
 pub const NREDIR: i32 = 2;
@@ -26,134 +26,201 @@ pub const NHERE: i32 = 23;
 pub const NXHERE: i32 = 24;
 pub const NNOT: i32 = 25;
 
+#[derive(PartialEq)]
 pub struct ncmd {
-    r#type: i32,
-    line_no: i32,
-    assign: Box<Node>,
-    args: Box<Node>,
-    redirect: Box<Node>
+    pub r#type: i32,
+    pub line_no: i32,
+    pub assign: Box<Option<Node>>,
+    pub args: Box<Option<Node>>,
+    pub redirect: Box<Option<Node>>
 }
 
 
+#[derive(PartialEq)]
 pub struct npipe {
-    r#type: i32,
-    background: i32,
-    cmd_list: Box<NodeList>,
+    pub r#type: i32,
+    pub background: i32,
+    pub cmd_list: Box<Option<NodeList>>,
 }
 
 
+#[derive(PartialEq)]
 pub struct nredir {
-    r#type: i32,
-    line_num: i32,
-    node: Box<Node>,
-    redirect: Box<Node>,
+    pub r#type: i32,
+    pub line_num: i32,
+    pub node: Box<Option<Node>>,
+    pub redirect: Box<Option<Node>>,
 }
 
 
+#[derive(PartialEq)]
 pub struct nbinary {
-    r#type: i32,
-    ch1: Box<Node>,
-    ch2: Box<Node>,
+    pub r#type: i32,
+    pub ch1: Box<Option<Node>>,
+    pub ch2: Box<Option<Node>>,
 }
 
+#[derive(PartialEq)]
 pub struct nif {
-    r#type: i32,
-    test: Box<Node>,
-    if_part: Box<Node>,
-    else_part: Box<Node>,
+    pub r#type: i32,
+    pub test: Box<Option<Node>>,
+    pub if_part: Box<Option<Node>>,
+    pub else_part: Box<Option<Node>>,
 }
 
 
+#[derive(PartialEq)]
 pub struct nfor {
-    r#type: i32,
-    line_num: i32,
-    args: Box<Node>,
-    var: String,
+    pub r#type: i32,
+    pub line_num: i32,
+    pub args: Box<Option<Node>>,
+    pub var: String,
 }
 
 
+#[derive(PartialEq)]
 pub struct ncase {
-    r#type: i32,
-    line_num: i32,
-    expr: Box<Node>,
-    cases: Box<Node>,
+    pub r#type: i32,
+    pub line_num: i32,
+    pub expr: Box<Option<Node>>,
+    pub cases: Box<Option<Node>>,
 }
 
 
+#[derive(PartialEq)]
 pub struct nclist {
-    r#type: i32,
-    next: Box<Node>,
-    pattern: Box<Node>,
-    body: Box<Node>,
+    pub r#type: i32,
+    pub next: Box<Option<Node>>,
+    pub pattern: Box<Option<Node>>,
+    pub body: Box<Option<Node>>,
 }
 
 
+#[derive(PartialEq)]
 pub struct ndefun {
-    r#type: i32,
-    line_num: i32,
-    text: String,
-    body: Box<Node>
+    pub r#type: i32,
+    pub line_num: i32,
+    pub text: String,
+    pub body: Box<Option<Node>>
 }
 
 
+#[derive(PartialEq)]
 pub struct narg {
-    r#type: i32,
-    next: Box<Node>,
-    text: String,
-    back_quote: Box<NodeList>,
+    pub r#type: i32,
+    pub next: Box<Option<Node>>,
+    pub text: String,
+    pub back_quote: Box<Option<NodeList>>,
 }
 
 
+#[derive(PartialEq)]
 pub struct nfile {
-    r#type: i32,
-    next: Box<Node>,
-    fd: i32,
-    file_name: Box<Node>,
-    expfname: String,
+    pub r#type: i32,
+    pub next: Box<Option<Node>>,
+    pub fd: i32,
+    pub file_name: Box<Option<Node>>,
+    pub expfname: String,
 }
 
 
+#[derive(PartialEq)]
 pub struct ndup {
-    r#type: i32,
-    next: Box<Node>,
-    fd: i32,
-    doc: Box<Node>
+    pub r#type: i32,
+    pub next: Box<Option<Node>>,
+    pub fd: i32,
+    pub doc: Box<Option<Node>>
 }
 
 
+#[derive(PartialEq)]
 pub struct nhere {
-    r#type: i32,
-    next: Box<Node>,
-    fd: i32,
-    doc: Box<Node>,
+    pub r#type: i32,
+    pub next: Box<Option<Node>>,
+    pub fd: i32,
+    pub doc: Box<Option<Node>>,
 }
 
+#[derive(PartialEq)]
 pub struct nnot {
-    r#type: i32,
-    com: Box<Node>,
+    pub r#type: i32,
+    pub com: Box<Option<Node>>,
 }
 
 pub union Node {
-    r#type: i32,
-    ncmd: std::mem::ManuallyDrop<ncmd>,
-    npipe: std::mem::ManuallyDrop<npipe>,
-    nredir: std::mem::ManuallyDrop<nredir>,
-    nbinary: std::mem::ManuallyDrop<nbinary>,
-    nif: std::mem::ManuallyDrop<nif>,
-    nfor: std::mem::ManuallyDrop<nfor>,
-    ncase: std::mem::ManuallyDrop<ncase>,
-    nclist: std::mem::ManuallyDrop<nclist>,
-    ndefun: std::mem::ManuallyDrop<ndefun>,
-    narg: std::mem::ManuallyDrop<narg>,
-    nfile: std::mem::ManuallyDrop<nfile>,
-    ndup: std::mem::ManuallyDrop<ndup>,
-    nhere: std::mem::ManuallyDrop<nhere>,
-    nnot: std::mem::ManuallyDrop<nnot>,
+    pub r#type: i32,
+    pub ncmd: std::mem::ManuallyDrop<ncmd>,
+    pub npipe: std::mem::ManuallyDrop<npipe>,
+    pub nredir: std::mem::ManuallyDrop<nredir>,
+    pub nbinary: std::mem::ManuallyDrop<nbinary>,
+    pub nif: std::mem::ManuallyDrop<nif>,
+    pub nfor: std::mem::ManuallyDrop<nfor>,
+    pub ncase: std::mem::ManuallyDrop<ncase>,
+    pub nclist: std::mem::ManuallyDrop<nclist>,
+    pub ndefun: std::mem::ManuallyDrop<ndefun>,
+    pub narg: std::mem::ManuallyDrop<narg>,
+    pub nfile: std::mem::ManuallyDrop<nfile>,
+    pub ndup: std::mem::ManuallyDrop<ndup>,
+    pub nhere: std::mem::ManuallyDrop<nhere>,
+    pub nnot: std::mem::ManuallyDrop<nnot>,
+}
+
+impl Display for Node {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let node_type = match self {
+            Node {r#type: i32} => "i32",
+            Node {ncmd: ncmd } => "ncmd",
+            Node {npipe: npipe } => "npipe",
+            Node {nredir: nredir } => "nredir",
+            Node {nbinary: nbinary } => "nbinary",
+            Node {nif: nif } => "nif",
+            Node {nfor: nfor } => "nfor",
+            Node {ncase: ncase } => "ncase",
+            Node {nclist: nclist } => "nclist",
+            Node {ndefun: ndefun } => "ndefun",
+            Node {narg: narg } => "narg",
+            Node {ndup: ndup } => "ndup",
+            Node {nhere: nhere } => "nhere",
+            Node {nnot: nnot } => "nnot",
+        };
+
+        write!(f,"type: {}",node_type)
+    }
+}
+
+impl PartialEq for Node {
+    fn eq(&self, other: &Self) -> bool {
+            self.r#type == other.r#type && self.ncmd == other.ncmd && self.npipe == other.npipe &&
+                self.nredir == other.nredir && self.nbinary == other.nbinary && self.nif == other.nif &&
+                self.nfor == other.nfor && self.ncase == other.ncase && self.nclist == other.nclist &&
+                self.ndefun == other.ndefun && self.narg == other.narg && self.nfile == other.nfile &&
+                self.ndup == other.ndup && self.nhere == other.nhere && self.nnot == other.nnot
+        }
 }
 
 pub struct NodeList {
-    next: Box<NodeList>,
+    next: Box<Option<NodeList>>,
     node: Node,
+}
+
+impl PartialEq for NodeList {
+    fn eq(&self, other: &Self) -> bool {
+        let mut right = other;
+        let mut left = self;
+        loop {
+            if right.node != left.node {
+                return false;
+            }
+
+            if right.next.is_some() && left.next.is_some() {
+                right = &right.next.unwrap();
+                left = &left.next.unwrap();
+            }
+            else {
+                return false;
+            }
+        }
+}
 }
 
 pub struct FuncNode {
@@ -166,6 +233,12 @@ pub struct FuncNode {
 /*
  * Make a copy of a parse tree.
  */
-pub fn copy_parse_tree (node: Box<Node>) -> Box<FuncNode> {
-        
+pub fn copy_parse_tree(node: Box<Node>) -> Box<FuncNode> {
+    
+    unimplemented!()
+}
+
+pub fn free_parse_tree(node: Box<Node>) {
+
+
 }

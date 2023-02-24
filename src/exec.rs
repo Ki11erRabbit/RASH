@@ -38,3 +38,9 @@ pub fn padvance_magic(path: Vec<String>, name: &str, magic: i32) -> i32 {
 pub fn padvance(path: Vec<String>, name: &str) -> i32 {
     padvance_magic(path, name, 1)
 }
+
+
+
+pub fn shell_exec(argv: Vec<String>, path: &str, idx: i32) {
+
+}

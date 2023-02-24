@@ -63,103 +63,154 @@ pub static mut OPTLIST: [char;17] = [0 as char ;17];
 #[macro_export]
 macro_rules! eflag {
     () => {
-        unsafe { options::OPTLIST[0] }
+        unsafe { crate::options::OPTLIST[0] }
+    };
+    ($val:expr) => {
+        unsafe { crate::options::OPTLIST[0] = $val }
     };
 }
 #[macro_export]
 macro_rules! fflag {
     () => {
-        unsafe { options::OPTLIST[1] }
+        unsafe { crate::options::OPTLIST[1] }
+    };
+    ($val:expr) => {
+        unsafe { crate::options::OPTLIST[1] = $val }
     };
 }
 #[macro_export]
 macro_rules! Iflag {
     () => {
-        unsafe { options::OPTLIST[2] }
+        unsafe { crate::options::OPTLIST[2] }
+    };
+    ($val:expr) => {
+        unsafe { crate::options::OPTLIST[2] = $val }
     };
 }
 #[macro_export]
 macro_rules! iflag {
     () => {
-        unsafe { options::OPTLIST[3] }
+        unsafe { crate::options::OPTLIST[3] }
+    };
+    ($val:expr) => {
+        unsafe { crate::options::OPTLIST[3] = $val }
     };
 }
 #[macro_export]
 macro_rules! mflag {
     () => {
-        unsafe { options::OPTLIST[4] }
+        unsafe { crate::options::OPTLIST[4] }
+    };
+    ($val:expr) => {
+        unsafe { crate::options::OPTLIST[4] = $val }
     };
 }
 #[macro_export]
-macro_rules! nfalg {
+macro_rules! nflag {
     () => {
-        unsafe { options::OPTLIST[5] }
+        unsafe { crate::options::OPTLIST[5] }
+    };
+    ($val:expr) => {
+        unsafe { crate::options::OPTLIST[5] = $val }
     };
 }
 #[macro_export]
 macro_rules! sflag {
     () => {
-        unsafe { options::OPTLIST[6] }
+        unsafe { crate::options::OPTLIST[6] }
+    };
+    ($val:expr) => {
+        unsafe { crate::options::OPTLIST[6] = $val }
     };
 }
 #[macro_export]
 macro_rules! xflag {
     () => {
-        unsafe { options::OPTLIST[7] }
+        unsafe { crate::options::OPTLIST[7] }
+    };
+    ($val:expr) => {
+        unsafe { crate::options::OPTLIST[7] = $val }
     };
 }
 #[macro_export]
 macro_rules! vflag {
     () => {
-        unsafe { options::OPTLIST[8] }
+        unsafe { crate::options::OPTLIST[8] }
+    };
+    ($val:expr) => {
+        unsafe { crate::options::OPTLIST[8] = $val }
     };
 }
 #[macro_export]
 macro_rules! Vflag {
     () => {
-        unsafe { options::OPTLIST[9] }
+        unsafe { crate::options::OPTLIST[9] }
+    };
+    ($val:expr) => {
+        unsafe { crate::options::OPTLIST[9] = $val }
     };
 }
 #[macro_export]
 macro_rules! Eflag {
     () => {
-        unsafe { options::OPTLIST[10] }
+        unsafe { crate::options::OPTLIST[10] }
+    };
+    ($val:expr) => {
+        unsafe { crate::options::OPTLIST[10] = $val }
     };
 }
 #[macro_export]
 macro_rules! Cflag {
     () => {
-        unsafe { options::OPTLIST[11] }
+        unsafe { crate::options::OPTLIST[11] }
+    };
+    ($val:expr) => {
+        unsafe { crate::options::OPTLIST[11] = $val }
     };
 }
 #[macro_export]
 macro_rules! aflag {
     () => {
-        unsafe { options::OPTLIST[12] }
+        unsafe { crate::options::OPTLIST[12] }
+    };
+    ($val:expr) => {
+        unsafe { crate::options::OPTLIST[12] = $val }
     };
 }
 #[macro_export]
 macro_rules! bflag {
     () => {
-        unsafe { options::OPTLIST[13] }
+        unsafe { crate::options::OPTLIST[13] }
+    };
+    ($val:expr) => {
+        unsafe { crate::options::OPTLIST[13] = $val }
     };
 }
 #[macro_export]
 macro_rules! uflag {
     () => {
-        unsafe { options::OPTLIST[14] }
+        unsafe { crate::options::OPTLIST[14] }
+    };
+    ($val:expr) => {
+        unsafe { crate::options::OPTLIST[14] = $val }
     };
 }
 #[macro_export]
 macro_rules! nolog {
     () => {
-        unsafe { options::OPTLIST[15] }
+        unsafe { crate::options::OPTLIST[15] }
+    };
+    ($val:expr) => {
+        unsafe { crate::options::OPTLIST[15] = $val }
     };
 }
 #[macro_export]
 macro_rules! debug {
     () => {
-        unsafe { options::OPTLIST[16] }
+        unsafe { crate::options::OPTLIST[16] }
+    };
+    ($val:expr) => {
+        unsafe { crate::options::OPTLIST[16] = $val }
     };
 }
 

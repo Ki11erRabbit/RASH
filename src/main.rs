@@ -33,6 +33,7 @@ use nix::unistd::{Pid, getpid,getuid,geteuid,getgid,getegid};
 use lazy_static::lazy_static;
 use std::env;
 use input::Input;
+use output;
 
 
 lazy_static! {
@@ -172,7 +173,7 @@ fn cmdloop(top: i32) -> i32 {
     let mut inter: i32;
     let mut status = 0;
     let mut numeof = 0;
-    let mut n: i32; //TODO: make into a node
+    let mut node: Box<Option<nodes::Node>>; 
     
     trace!("cmdloop({}) called\n",top);
 
@@ -187,9 +188,9 @@ fn cmdloop(top: i32) -> i32 {
             inter += 1;
             mail::check_mail();
         }
-        n = parser::parse_cmd(inter);
+        node = parser::parse_cmd(inter);
 
-        if n == nodes::NEOF {
+        if node == Node_EOF!() {
             if !top != 0 || numeof >= 50 {
                 break;
             }
@@ -212,16 +213,17 @@ fn cmdloop(top: i32) -> i32 {
             }
             numeof += 1;
 
-            i = eval::eval_tree(n, 0);
-            if n != 0 {
-                status = i;
+            i = eval::eval_tree(node, 0);
+            match *node {
+                None => status = i,
+                _ => (),
             }
         }
         unsafe { 
             skip = eval::EVAL_SKIP;
         }
 
-        if skip != 9 {
+        if skip != 0 {
             unsafe {
                 eval::EVAL_SKIP &= !(skip_func!() | skip_func_def!());
                 break;
