@@ -190,9 +190,10 @@ macro_rules! mpathval {
         VMPATH.lock().unwrap().get_val_index(9)
     };
 }
+#[macro_export]
 macro_rules! pathval {
     () => {
-        VPATH.lock().unwrap().get_val_index(5)
+        var::VPATH.lock().unwrap().get_val_index(5)
     };
 }
 macro_rules! ps1val {

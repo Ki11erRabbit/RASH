@@ -1,13 +1,13 @@
 
 
 pub struct Output {
-    nextc: String,
-    end: String,
-    buf: String,
-    fd: u32,
+    buf: Option<String>,
+    fd: i32,
     flags: i32,
 }
 
+pub const OUTPUT: Output = Output {buf: None, fd: 1, flags: 0};
+pub const ERROUT: Output = Output {buf: None, fd: 2, flags: 0};
 
 
 
@@ -45,5 +45,14 @@ pub fn out1fmt(format: &str, values: &str) {
 }
 
 pub fn flushall() {
+
+}
+
+//TODO turn into macro that calls the correct function
+#[inline]
+pub fn out2c(c: char) {
+
+}
+pub fn out2str(string: &str) {
 
 }

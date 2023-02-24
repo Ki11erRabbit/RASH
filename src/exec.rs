@@ -1,5 +1,6 @@
 
 
+pub static mut PATHOPT: Option<String> = None;
 
 pub fn hashcd() {
 
@@ -28,7 +29,12 @@ pub fn changepath(newval: &str) {
  * 1 we shall recognise %builtin/%func.  Otherwise we shall accept any
  * pathopt.
  */
-pub fn padvance_magic(path: Vec<&str>, name: &str, magic: i32) -> i32 {
+pub fn padvance_magic(path: Vec<String>, name: &str, magic: i32) -> i32 {
      
     0
+}
+
+#[inline]
+pub fn padvance(path: Vec<String>, name: &str) -> i32 {
+    padvance_magic(path, name, 1)
 }

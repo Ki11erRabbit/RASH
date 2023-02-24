@@ -208,7 +208,7 @@ pub fn cdcmd(argc: i32, argv: Vec<String>) -> Option<i32> {
         'docd: loop {
             if !goto_step6 {
                 path = var::bltinlookup("CDPATH")?;
-                while {let q = (p = &path, (len = exec::padvance_magic(vec![&path], dest.as_ref().unwrap(), 0))); len} >= 0 {
+                while {let q = (p = &path, (len = exec::padvance_magic(vec![path], dest.as_ref().unwrap(), 0))); len} >= 0 {
                     c = Some(p.chars().collect::<Vec<char>>()[0]);
                     
                     //if stat64(p, &statb) >= 0 && S_ISDIR(statb.st_mode) 
