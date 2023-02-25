@@ -74,6 +74,7 @@ pub struct nfor {
     pub r#type: i32,
     pub line_num: i32,
     pub args: Box<Option<Node>>,
+    pub body: Box<Option<Node>>,
     pub var: String,
 }
 

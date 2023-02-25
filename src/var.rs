@@ -23,6 +23,10 @@ pub const VNOFUNC:i32    = 0x40; // don't call the callback function
 pub const VNOSET:i32     = 0x80; // do not set variable - just readonly test
 pub const VNOSAVE:i32    = 0x100;// when text is on the heap before setvareq
 
+pub static mut LINE_NUM: i32 = 0;
+pub static mut LINE_NUM_VAR: String = String::new();
+
+
 #[derive(Debug)]
 pub struct VarError {
     pub msg: String,

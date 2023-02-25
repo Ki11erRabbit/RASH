@@ -1,36 +1,32 @@
 use crate::nodes::{Node, FuncNode};
-use crate::nodes;
 use crate::trap;
 use crate::options;
 use crate::exec;
 use crate::redir;
+use crate::parser;
+use crate::nodes;
+use crate::jobs::Job;
+use crate::var;
+use crate::jobs;
+use super::Node_EOF;
+use crate::expand;
+use crate::expand::ArgList;
 use nix::unistd::getpid;
+use likely_stable::likely;
 use super::{nflag, eflag,trace,iflag,mflag};
 /* reasons for skipping commands (see comment on breakcmd routine) */
-#[macro_export]
-macro_rules! skip_break {
-    () => {
-        (1 << 0)
-    };
-}	
-#[macro_export]
-macro_rules! skip_cont {
-    () => {
-        (1 << 1)
-    };
-}	
-#[macro_export]
-macro_rules! skip_func {
-    () => {
-        (1 << 2)
-    };
-}	
-#[macro_export]
-macro_rules! skip_func_def {
-    () => {
-        (1 << 3)
-    };
-}	
+pub const SKIP_BREAK: i32 = 1 << 0;
+pub const SKIP_CONT:i32 = 1 << 1;
+pub const SKIP_FUNC:i32 = 1 << 2;
+pub const SKIP_FUNC_DEF:i32 = 1 << 3;
+
+
+pub struct BackCmd {        // result of eval_back_cmd
+    pub fd: i32,            // file descriptor to read from
+    pub buf: String,        // buffer
+    pub job: Box<Option<Job>>,  // job structure from command
+}
+
 
 /* flags in argument to evaltree */
 pub const EV_EXIT: i32 = 0o1;                            // exit after evaluating tree
@@ -43,21 +39,50 @@ pub static mut COMMAND_NAME: String = String::new();     // currently executing 
 pub static mut BACK_EXIT_STATUS: i32 = 0;                // exit status of backquoted command
 pub static mut SAVE_STATUS: i32 = 0;                     // exit status of last command outside traps
 
+static mut SKIP_COUNT: i32 = 0;                          // number of levels to skip
+static mut LOOP_NEST: i32 = 0;                           // current loop nesting level
 
 /*
  * The eval commmand.
  */
-pub fn eval_cmd(argc: i32, argv: Vec<String>, flags: i32) -> i32 {
+pub fn eval_cmd(argc: i32, argv: Vec<String>, flags: i32) -> Result<i32,i32> {
+    
+    let string = String::new(); 
+    if argv.len() > 1 {
+        for i in 1..argv.len() {
+            string = string + &argv[i] + " ";
+        }
+        string.pop();
 
-    0
+        return eval_string(Some(string), flags & EV_TESTED);
+
+    }
+    Ok(0)
 }
 
 /*
  * Execute a command or commands contained in a string.
  */
-pub fn evalstring(string: Option<String>, flags: i32) -> i32 {
-    
-    0
+pub fn eval_string(string: Option<String>, flags: i32) -> Result<i32,i32> {
+    let node: Box<Option<Node>>;
+    let mut status: i32 = 0;
+
+    while {node = parser::parse_cmd(0); node != Node_EOF!()} {
+        let i;
+
+        let not_result = !(if parser::eof() {0} else {EV_EXIT});
+        i = eval_tree(node, flags & not_result)?;
+
+        if node.is_some() {
+            status = i;
+        }
+
+        if unsafe { EVAL_SKIP != 0} {
+            break;
+        }
+    }
+
+    Ok(status)
 }
 
 macro_rules! eval_tree_error {
@@ -76,6 +101,10 @@ macro_rules! eval_tree_error {
     };
 }
 
+fn eval_tree_no_return(node: Box<Option<Node>>, flags: i32) {
+    eval_tree(node, flags);
+    std::process::abort();
+}
 
 /*
  * Evaluate a parse tree.  The value is left in the global variable
@@ -111,21 +140,25 @@ pub fn eval_tree(node: Box<Option<Node>>, flags: i32) -> Result<i32,i32> {
             }
         }
         nodes::NREDIR => {
-            let lineno = node.unwrap().nredir.line_num;
-            let errlinno = lineno;
+            unsafe {
+                var::LINE_NUM = node.unwrap().nredir.line_num;
+                let errlinno = var::LINE_NUM;
+            }
             if unsafe { FUNC_LINE != 0 } {
-                lineno -= unsafe {FUNC_LINE} -1;
+                unsafe{
+                    var::LINE_NUM -= FUNC_LINE -1;
+                }
                 exp_redir(node.unwrap().nredir.redirect);
                 redir::push_redir(node.unwrap().nredir.redirect);
-                status = redirect_safe(node.unwrap().nredir.redirect, REDIR_PUSH)?;
+                status = redir::redirect_safe(node.unwrap().nredir.redirect, redir::REDIR_PUSH)?;
                 if status != 0 {
                     check_exit = EV_TESTED;
                 }
                 else {
                     status = eval_tree(node.unwrap().nredir.node, flags & EV_TESTED)?;
                 }
-                if node.unwrap().nredir != 0 {
-                    pop_redir(0);
+                if node.unwrap().nredir.redirect.is_some() {
+                    redir::pop_redir(0);
                 }
             }
         },
@@ -143,7 +176,7 @@ pub fn eval_tree(node: Box<Option<Node>>, flags: i32) -> Result<i32,i32> {
             status = eval_func(node,flags)?;
         }
         nodes::NSUBSHELL | nodes::NBACKGND => {
-            eval_func = eval_sub_shell;
+            eval_func = eval_subshell;
             check_exit = EV_TESTED;
             status = eval_func(node,flags)?;
         },
@@ -158,11 +191,11 @@ pub fn eval_tree(node: Box<Option<Node>>, flags: i32) -> Result<i32,i32> {
         },
         nodes::NAND | nodes::NOR | nodes::NSEMI => {
             'run_once: loop {
-                is_or = node.unwrap().r#type - NAND;
+                is_or = node.unwrap().r#type - nodes::NAND;
                 status = eval_tree(node.unwrap().nbinary.ch1, flags |((is_or >> 1)) & EV_TESTED)?;
                 
                 let not_status = !status;
-                if not_status == is_or || EVAL_SKIP {
+                if not_status == is_or || unsafe { EVAL_SKIP != 0 } {
                     break 'run_once;
                 }
                 
@@ -199,7 +232,7 @@ pub fn eval_tree(node: Box<Option<Node>>, flags: i32) -> Result<i32,i32> {
             }
         },
         nodes::NDEFUN => {
-            defun(node);
+            exec::def_func(node);
         },
     }
     unsafe {
@@ -222,24 +255,210 @@ pub fn eval_tree(node: Box<Option<Node>>, flags: i32) -> Result<i32,i32> {
     }
 }
 
-fn skip_loop() -> bool {
-    unimplemented!()
+fn skip_loop() -> i32 {
+
+    let skip = unsafe {EVAL_SKIP};
+
+    match skip {
+        0 => (),
+        SKIP_BREAK | SKIP_CONT => {
+            'loop_once: loop {
+                unsafe {
+                
+                    if likely( { SKIP_COUNT -= 1; SKIP_COUNT <= 0}) {
+                           EVAL_SKIP = 0;
+                           break 'loop_once;
+                    }
+
+                    skip = SKIP_BREAK;
+                    break;
+                }
+            }
+        }
+    }
+    skip
 }
 
 fn eval_loop(node: Box<Option<Node>>, flags: i32) -> Result<i32,i32> {
-    unimplemented!()
+    let mut skip;
+    let mut status = 0;
+    
+    unsafe {
+        LOOP_NEST += 1;
+    }
+
+    flags &= EV_TESTED;
+
+    loop {
+
+        let i = eval_tree(node.unwrap().nbinary.ch1, EV_TESTED)?;
+        skip = skip_loop();
+        if skip == SKIP_FUNC {
+            status = i;
+        }
+        if skip != 0 {
+            continue;
+        }
+        if node.unwrap().r#type != nodes::NWHILE {
+            i = !i;
+        }
+        if i != 0 {
+            break;
+        }
+
+        status = match eval_tree(node.unwrap().nbinary.ch2, flags) {
+            Ok(stat) => stat,
+            Err(e) => {
+                unsafe {
+                    LOOP_NEST -= 1;
+                }
+                
+                return Err(e);
+            }
+        };
+        skip = skip_loop();
+        
+        let not_skip_cont = ! SKIP_CONT;
+        let nand_skip = !(skip & not_skip_cont);
+
+        if nand_skip != 0 {
+            break;
+        }
+    }
+    unsafe {
+        LOOP_NEST -= 1;
+    }
+    
+    return Ok(status);
 }
 
 fn eval_for(node: Box<Option<Node>>, flags: i32) -> Result<i32,i32> {
-    unimplemented!()
+    let arg_list: ArgList;
+    let arg_ptr: Box<Option<Node>>; 
+    let string_list: StringList;
+    let mut status = 0;
+
+    if unsafe {FUNC_LINE != 0} {
+        unsafe {
+            var::LINE_NUM = node.unwrap().nredir.line_num;
+
+            if FUNC_LINE != 0 {
+                var::LINE_NUM -= FUNC_LINE - 1;
+            }
+        }
+    }
+        
+    arg_ptr = node.unwrap().nfor.args;
+    while arg_ptr.is_some() {
+        expand::expand_arg(arg_ptr,&mut arg_list,expand::EXP_FULL | expand::EXP_TILDE);
+
+        arg_ptr = arg_ptr.unwrap().narg.next;
+    }
+
+    unsafe{
+        LOOP_NEST += 1;
+    }
+    flags &= EV_TESTED;
+
+    for arg in arg_list.list.iter_mut() {
+        var::setvar(&node.unwrap().nfor.var, &Some(arg.to_string()), flags);
+        status = match eval_tree(node.unwrap().nfor.body, flags) {
+            Ok(stat) => status,
+            Err(e) => {
+                unsafe{
+                    LOOP_NEST -= 1;
+                }
+                
+                return Err(e);
+            }
+        };
+
+        if skip_loop() & !SKIP_CONT != 0 {
+            break;
+        }
+    }
+
+    unsafe{
+        LOOP_NEST -= 1;
+    }
+    return Ok(status)    
 }
 
 fn eval_case(node: Box<Option<Node>>, flags: i32) -> Result<i32,i32>  {
-    unimplemented!()
+
+    let mut arg_list;
+    let mut status = 0;
+
+    unsafe {
+        var::LINE_NUM = node.unwrap().ncase.line_num;
+        if FUNC_LINE != 0 {
+            var::LINE_NUM -= FUNC_LINE - 1;
+        }
+    }
+    expand::expand_arg(node.unwrap().ncase.expr, &mut arg_list, expand::EXP_TILDE);
+    let mut case = node.unwrap().ncase.cases;
+    'out: while case.is_some() && unsafe {EVAL_SKIP == 0} {
+        let mut pattern = case.unwrap().nclist.pattern;
+        while pattern.is_some() {
+            if expand::case_match(pattern, &arg_list.list[0]) != 0 {
+				/* Ensure body is non-empty as otherwise
+				 * EV_EXIT may prevent us from setting the
+				 * exit status.
+				 */
+                if unsafe {EVAL_SKIP == 0} && case.unwrap().nclist.body.is_some() {
+                    status = eval_tree(case.unwrap().nclist.body,flags)?;
+                }
+                break 'out;
+            }
+            pattern = pattern.unwrap().narg.next;
+        }
+        case = case.unwrap().nclist.next;
+    }
+    Ok(status)
 }
 
+/*
+ * Kick off a subshell to evaluate a tree.
+ */
 fn eval_subshell(node: Box<Option<Node>>, flags: i32) -> Result<i32,i32> {
-    unimplemented!()
+    
+    let background = node.unwrap().r#type == nodes::NBACKGND;
+    let mut status = 0;
+    unsafe {
+        var::LINE_NUM = node.unwrap().ncase.line_num;
+        if FUNC_LINE != 0 {
+            var::LINE_NUM -= FUNC_LINE - 1;
+        }
+    }
+
+    redir::exp_redir(node.unwrap().nredir.redirect);
+    //block interrupts
+    if !background && flags & EV_EXIT != 0 && !trap::have_traps() {
+        crate::init::fork_reset();
+        //unblock interrupts
+        redir::redirect(node.unwrap().nredir.redirect, 0);
+        eval_tree_no_return(node.unwrap().nredir.node, flags);
+    }
+    
+    let job = jobs::make_job(node,1);
+    
+    if {let background = if background {1} else {0}; jobs::fork_shell(job,node,background).as_raw() == 0 } {
+        flags |= EV_EXIT;
+        if background {
+            flags &= !EV_TESTED;
+        }
+
+        //unblock interrupts
+        redir::redirect(node.unwrap().nredir.redirect, 0);
+        eval_tree_no_return(node.unwrap().nredir.node, flags);
+    }
+
+    if !background {
+        status = jobs::wait_for_job(job);
+    }
+    //unblock interrupts
+
+    return Ok(status)
 }
 
 fn exp_redir(node: Box<Option<Node>>) {

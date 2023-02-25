@@ -1,4 +1,4 @@
-
+use crate::nodes::Node;
 
 pub static mut PATHOPT: Option<String> = None;
 
@@ -42,5 +42,13 @@ pub fn padvance(path: Vec<String>, name: &str) -> i32 {
 
 
 pub fn shell_exec(argv: Vec<String>, path: &str, idx: i32) {
+
+}
+
+/*
+ * Define a shell function.
+ */
+pub fn def_func(func: Box<Option<Node>>) {
+
 
 }

@@ -6,6 +6,7 @@ mod eval;
 mod exec;
 mod expand;
 mod histedit;
+mod init;
 mod input;
 mod jobs;
 mod machdep;
@@ -24,6 +25,7 @@ mod parser;
 mod redir;
 mod shell;
 mod system;
+mod token;
 mod trap;
 mod var;
 
@@ -33,7 +35,6 @@ use nix::unistd::{Pid, getpid,getuid,geteuid,getgid,getegid};
 use lazy_static::lazy_static;
 use std::env;
 use input::Input;
-use output;
 
 
 lazy_static! {
@@ -82,7 +83,7 @@ fn main() {
         None => (),
         Some(val) =>{
             let temp_val = if sflag!() as u32 != 0 { 0 } else { eval::EV_EXIT };
-            eval::evalstring(options::MINUSC, temp_val);
+            eval::eval_string(options::MINUSC, temp_val);
         },
     }
 
@@ -213,7 +214,7 @@ fn cmdloop(top: i32) -> i32 {
             }
             numeof += 1;
 
-            i = eval::eval_tree(node, 0);
+            i = eval::eval_tree(node, 0).unwrap();
             match *node {
                 None => status = i,
                 _ => (),
