@@ -55,7 +55,7 @@ static mut LOOP_NEST: i32 = 0;                           // current loop nesting
 /*
  * The eval commmand.
  */
-pub fn eval_cmd(argc: i32, argv: Vec<String>, flags: i32) -> Result<i32,i32> {
+pub fn eval_cmd(argc: usize, argv: Vec<String>, flags: i32) -> Result<i32,i32> {
     
     let string = String::new(); 
     if argv.len() > 1 {
@@ -874,7 +874,7 @@ fn eval_command(cmd: Option<Box<Node>>, flags: i32) -> Result<i32,i32> {
             eval_builtin(cmd_entry.param.cmd, argc, argv, flags)?;
         },
         exec::CMD_FUNCTION => {
-            eval_func(cmd_entry.param.func, argc, argv, flags)?;
+            eval_func(cmd_entry.param.func, argc.try_into().unwrap(), argv, flags)?;
         }
     }
 
@@ -896,7 +896,7 @@ fn eval_command(cmd: Option<Box<Node>>, flags: i32) -> Result<i32,i32> {
     return Ok(status);
 }
 
-fn eval_builtin(cmd: BuiltInCmd, argc:i32, argv: Vec<String>, flags: i32) -> Result<i32,i32> {
+fn eval_builtin(cmd: BuiltInCmd, argc:usize, argv: Vec<String>, flags: i32) -> Result<i32,i32> {
     let mut status = 0;
     let save_cmd_name = unsafe {COMMAND_NAME};
 
@@ -906,7 +906,7 @@ fn eval_builtin(cmd: BuiltInCmd, argc:i32, argv: Vec<String>, flags: i32) -> Res
     else {
         status = cmd.builtin.unwrap()(argc, argv);
     }
-    output::flush_all();
+    output::flushall();
     if outerr(out1) {
         eprintln!("{}: I/O error", unsafe { COMMAND_NAME});
     }
@@ -921,8 +921,43 @@ fn eval_builtin(cmd: BuiltInCmd, argc:i32, argv: Vec<String>, flags: i32) -> Res
     Ok(status)
 }
 
-fn eval_func(func: std::mem::ManuallyDrop<FuncNode>, argc:i32, argv: Vec<String>, flags:i32) -> Result<i32,i32> {
-    unimplemented!()
+fn eval_func(func: std::mem::ManuallyDrop<FuncNode>, argc: usize, argv: Vec<String>, flags:i32) -> Result<i32,i32> {
+    let mut status = 0;
+    let save_cmd_name = unsafe {COMMAND_NAME};
+    let save_func_line = unsafe {FUNC_LINE};
+    let save_loop_nest = unsafe {LOOP_NEST};
+    let save_param = unsafe {options::SHELLPARAM};
+
+    //block interrupts
+    func.count += 1;
+    unsafe {
+        FUNC_LINE = func.node.unwrap().ndefun.line_num;
+        LOOP_NEST = 0;
+    }
+    //unblock interrupts
+    unsafe {
+        options::SHELLPARAM.num_param = argc - 1;
+        options::SHELLPARAM.param_list = argv.into_iter().skip(1).collect(); 
+        options::SHELLPARAM.opt_index = 1;
+        options::SHELLPARAM.opt_off = -1;
+    }
+    eval_tree(func.node.unwrap().ndefun.body, flags & EV_TESTED);
+
+    //block interrupts
+    unsafe {
+        LOOP_NEST = save_loop_nest;
+        FUNC_LINE = save_func_line;
+        nodes::free_parse_tree(func);
+        options::free_param(&mut options::SHELLPARAM);
+        options::SHELLPARAM = save_param;
+    }
+    //unblock interrupts
+
+    unsafe {
+        EVAL_SKIP &= !(SKIP_FUNC | SKIP_FUNC_DEF);
+    }
+    
+    return Ok(status);
 }
 
 fn break_cmd(argc:i32, argv: Vec<String>) {

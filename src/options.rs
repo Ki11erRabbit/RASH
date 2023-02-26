@@ -1,12 +1,19 @@
 use lazy_static::lazy_static;
 
-pub struct ShParam {
-    nparam: u32,
-    param_list: Vec<String>,
-    opt_index: usize,
-    opt_off: usize,
+pub struct ShellParam {
+    pub num_param: usize,
+    pub param_list: Vec<String>,
+    pub opt_index: usize,
+    pub opt_off: isize,
 }
 
+
+pub static mut SHELLPARAM: ShellParam = ShellParam {
+    num_param: 0,               // number of positionall parameters (without $0)
+    param_list: Vec::new(),     // list of positional parameters
+    opt_index: 0,               // next parameter ot be processed by getopts
+    opt_off: 0,                 // used by getopts
+};
 
 pub static MINUSC: Option<String> = None;
 pub static mut ARGLIST: Vec<&str> = Vec::new();

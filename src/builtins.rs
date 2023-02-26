@@ -3,7 +3,7 @@ use lazy_static::lazy_static;
 #[derive(Clone,Copy)]
 pub struct BuiltInCmd {
     pub name: &'static str,
-    pub builtin: Option<fn(i32,Vec<String>) -> i32>,
+    pub builtin: Option<fn(usize,Vec<String>) -> i32>,
     pub flags: u32,
 }
 
@@ -31,12 +31,12 @@ pub const BUILTIN_CMD: Vec<BuiltInCmd> = vec![
     BuiltInCmd {name: "export", builtin: Some(exportcmd), flags: 7},
     BuiltInCmd {name: "false", builtin: Some(falsecmd), flags: 2},
     BuiltInCmd {name: "fg", builtin: Some(fgcmd), flags: 2},
-    BuiltInCmd {name: "getopts", builtin: Some(getoptscmd) flags: 2},
+    BuiltInCmd {name: "getopts", builtin: Some(getoptscmd), flags: 2},
     BuiltInCmd {name: "hash", builtin: Some(hashcmd), flags: 2},
     BuiltInCmd {name: "jobs", builtin: Some(jobscmd), flags: 2},
     BuiltInCmd {name: "kill", builtin: Some(killcmd), flags: 2},
     BuiltInCmd {name: "local", builtin: Some(localcmd), flags: 7},
-    BuiltInCmd {name: "printf", builtin: Some(printfcmd) flags: 0},
+    BuiltInCmd {name: "printf", builtin: Some(printfcmd), flags: 0},
     BuiltInCmd {name: "pwd", builtin: Some(pwdcmd), flags: 2},
     BuiltInCmd {name: "read", builtin: Some(readcmd), flags: 2},
     BuiltInCmd {name: "readonly", builtin: Some(exportcmd), flags: 7},

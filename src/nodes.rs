@@ -255,7 +255,14 @@ pub fn copy_parse_tree(node: Box<Node>) -> Box<FuncNode> {
     unimplemented!()
 }
 
-pub fn free_parse_tree(node: Box<Node>) {
-
-
+/*
+ * Free a parse tree.
+ */
+pub fn free_parse_tree(node: std::mem::ManuallyDrop<FuncNode>) {
+    unsafe {
+        std::mem::ManuallyDrop::<FuncNode>::drop(&mut node);
+    }
 }
+
+
+
