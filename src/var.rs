@@ -644,12 +644,12 @@ pub fn pop_local_vars() {
  * Create a new localvar environment.
  */
 
-pub fn push_local_vars(push: bool) -> Option<Box<HashMap<String,LocalVar>>> {
+pub fn push_local_vars(push: bool) ->  usize/*Option<Box<HashMap<String,LocalVar>>>*/ {
     
     if !push {
         return match LOCALVAR_STACK.lock().unwrap().last() {
-            None => None,
-            Some(val) => Some(val.clone()), 
+            None => 0,
+            Some(val) => LOCALVAR_STACK.lock().unwrap().len() -1 ,//Some(val.clone()), 
         };
     }
     //block Interrupts
@@ -658,7 +658,8 @@ pub fn push_local_vars(push: bool) -> Option<Box<HashMap<String,LocalVar>>> {
     
     //unblock interrupts
 
-   return Some(LOCALVAR_STACK.lock().unwrap().last().unwrap().clone()); 
+    return LOCALVAR_STACK.lock().unwrap().len() -1;
+    //return Some(LOCALVAR_STACK.lock().unwrap().last().unwrap().clone()); 
 }
 
 pub fn unwind_local_vars(level: usize) {

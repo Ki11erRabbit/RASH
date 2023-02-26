@@ -11,6 +11,7 @@ pub struct RedirTable {
     renamed: [i32;10],
 }
 
+pub static mut REDIR_LIST: Vec<Box<RedirTable>> = Vec::new();
 
 pub const REDIR_PUSH:i32 = 0o1;     // save previous values of file descriptors
 pub const REDIR_BACKQ: i32 = 0o2;   // save the command output in memory
@@ -65,7 +66,7 @@ pub fn sh_open(path_name: &str, mayfail: i32) -> std::io::Result<i32> {
 }
 
 
-pub fn push_redir(redir:Option<Box<Node>>) -> Box<RedirTable> {
+pub fn push_redir(redir:Option<Box<Node>>) -> usize {
 
     unimplemented!()
 
@@ -73,6 +74,15 @@ pub fn push_redir(redir:Option<Box<Node>>) -> Box<RedirTable> {
 
 pub fn pop_redir(drop: i32) {
 
+}
+
+pub fn unwind_redir(stop: usize) {
+    loop {
+        if stop == unsafe {REDIR_LIST.len() - 1 }{
+            break;
+        }
+        pop_redir(0);
+    }
 
 }
 

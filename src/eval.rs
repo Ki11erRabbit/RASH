@@ -9,21 +9,20 @@ use crate::redir;
 use crate::parser;
 use crate::nodes;
 use crate::jobs::Job;
-use crate::var;
 use crate::jobs;
+use crate::var;
 use crate::input;
 use crate::builtins;
 use crate::builtins::BuiltInCmd;
-use super::{Node_EOF,defpath,EXECCMD,COMMANDCMD};
+use super::{Node_EOF,defpath,EXECCMD,COMMANDCMD,pathval};
 use crate::expand;
 use crate::expand::ArgList;
-use crate::exec::{Param,CmdEntry};
+use crate::exec::{CmdEntry};
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::mem::ManuallyDrop;
 use nix::unistd::{getpid,pipe,close,dup2,Pid};
 use likely_stable::{unlikely,likely};
-use super::{nflag, eflag,trace,iflag,mflag,xflag,ps4val};
+use super::{nflag, eflag,trace,iflag,mflag,xflag,ps4val,EVALCMD};
 /* reasons for skipping commands (see comment on breakcmd routine) */
 pub const SKIP_BREAK: i32 = 1 << 0;
 pub const SKIP_CONT:i32 = 1 << 1;
@@ -674,13 +673,13 @@ fn eval_command(cmd: Option<Box<Node>>, flags: i32) -> Result<i32,i32> {
 
     // First expand the arguments
     trace!("evalcommand({}, {}) called\n",cmd.unwrap(),flags);
-    let file_stop;
+    let file_stop; 
     unsafe {
-        file_stop = input::PARSEFILE_STACK.lock().unwrap().last().unwrap();
+        file_stop = input::PARSEFILE_STACK.lock().unwrap().len() -1;
         BACK_EXIT_STATUS = 0;
     }
     
-    let mut cmd_entry = CmdEntry { cmd_type: exec::CMD_BUILTIN, param: exec::Param{cmd: std::mem::ManuallyDrop::new(builtins::BUILTIN_CMD[0]) } };
+    let mut cmd_entry = CmdEntry { cmd_type: exec::CMD_BUILTIN, param: exec::Param{cmd: *std::mem::ManuallyDrop::new(builtins::BUILTIN_CMD[0]) } };
 
     let mut cmd_flag;
     let exec_cmd = false;
@@ -699,7 +698,7 @@ fn eval_command(cmd: Option<Box<Node>>, flags: i32) -> Result<i32,i32> {
         let mut pseudo_var_flag = 0;
 
         loop {
-            exec::find_command(arglist.list[0], &mut cmd_entry, cmd_flag | DO_REGBLTIN, pathval());
+            exec::find_command(arglist.list[0], &mut cmd_entry, cmd_flag | DO_REGBLTIN, pathval!());
 
             vlocal += 1;
 
@@ -713,13 +712,13 @@ fn eval_command(cmd: Option<Box<Node>>, flags: i32) -> Result<i32,i32> {
 
                 vlocal = special_builtin as i32 ^ builtins::BUILTIN_SPECIAL;
             }
-            exec_cmd = cmd_entry.param.cmd == std::mem::ManuallyDrop::new(EXECCMD!());
+            exec_cmd = cmd_entry.param.cmd == *std::mem::ManuallyDrop::new(EXECCMD!());
 
-            if likely(cmd_entry.param.cmd != std::mem::ManuallyDrop::new(COMMANDCMD!())) {
+            if likely(cmd_entry.param.cmd != *std::mem::ManuallyDrop::new(COMMANDCMD!())) {
                 break
             }
 
-            cmd_flag = parse_command_args(arglist, args, path);
+            cmd_flag = parse_command_args(arglist, args, &mut path);
             if cmd_flag != 0 {
                 break;
             }
@@ -727,7 +726,7 @@ fn eval_command(cmd: Option<Box<Node>>, flags: i32) -> Result<i32,i32> {
 
         for arg in args.iter() {
             let temp = if pseudo_var_flag != 0 && is_assignment(arg.narg.text) {expand::EXP_VARTILDE} else {expand::EXP_FULL | expand::EXP_TILDE};
-            expand::expand_arg(Some(arg),&mut arglist,temp);
+            expand::expand_arg(Some(*arg),&mut arglist,temp);
 
         }
 
@@ -739,11 +738,29 @@ fn eval_command(cmd: Option<Box<Node>>, flags: i32) -> Result<i32,i32> {
             vflags = var::VEXPORT;
         }
     }
-
+    let path = {
+        if path.len() > 0 {
+            path[0]
+        }
+        else {
+            "".to_string()
+        }
+    };
     let local_var_stop = var::push_local_vars(vlocal != 0);
   
 
-    let argv;//TODO initialize argv
+    let argv;
+    for arg in arglist.list.iter() {
+        trace!("eval_command arg: {}\n",arg);
+        argv.push(arg);
+    }
+
+    let lastarg;
+    if iflag!() as i32 != 0 && unsafe {FUNC_LINE == 0} && argc > 0 {
+        lastarg = argv.last();
+    } else {
+        lastarg = None;
+    }
 
 
     unsafe {
@@ -751,7 +768,7 @@ fn eval_command(cmd: Option<Box<Node>>, flags: i32) -> Result<i32,i32> {
     }
     exp_redir(cmd.unwrap().ncmd.redirect);
     let redir_stop = redir::push_redir(cmd.unwrap().ncmd.redirect);
-    status = redir::redirect_safe(cmd.unwrap().ncmd.redirect, redir::REDIR_PUSH|redir::REDIR_SAVEFD2);
+    status = redir::redirect_safe(cmd.unwrap().ncmd.redirect, redir::REDIR_PUSH|redir::REDIR_SAVEFD2)?;
 
     if unlikely(status != 0) {
         unsafe {
@@ -765,12 +782,12 @@ fn eval_command(cmd: Option<Box<Node>>, flags: i32) -> Result<i32,i32> {
         if cmd.unwrap().ncmd.redirect.is_some() {
             redir::pop_redir(exec_cmd as i32);
         }
-        var::unwind_local_vars(redir_stop);
-        var::unwind_files(file_stop);
+        var::unwind_local_vars(local_var_stop);
+        input::unwind_files(file_stop);
         var::unwind_local_vars(local_var_stop);
         if lastarg.is_some() {
             
-            var::setvar("_", lastarg, 0);
+            var::setvar("_", &lastarg, 0);
         }
 
         return Err(status);
@@ -830,11 +847,11 @@ fn eval_command(cmd: Option<Box<Node>>, flags: i32) -> Result<i32,i32> {
                 redir::pop_redir(exec_cmd as i32);
             }
             var::unwind_local_vars(redir_stop);
-            var::unwind_files(file_stop);
+            input::unwind_files(file_stop);
             var::unwind_local_vars(local_var_stop);
             if lastarg.is_some() {
                 
-                var::setvar("_", lastarg, 0);
+                var::setvar("_", &lastarg, 0);
             }
 
             return Err(status);
@@ -843,13 +860,13 @@ fn eval_command(cmd: Option<Box<Node>>, flags: i32) -> Result<i32,i32> {
 		    /* Fork off a child process if necessary. */
             'loop_once: loop {
 
-                if !(flags & EV_EXIT != 0) || traps::have_traps() {
+                if !(flags & EV_EXIT != 0) || trap::have_traps() != 0 {
                     //block interrupts
 
-                    job = job::vforkexec(cmd, argv, path, cmd_entry.param.index);
+                    job = jobs::vforkexec(cmd, argv, &path, cmd_entry.param.index);
                     break 'loop_once;
                 }
-                exec::shell_exec(argv, path, cmd_entry.param.index);
+                exec::shell_exec(argv, &path, cmd_entry.param.index);
                 // NOT REACHED
             } 
         },
@@ -869,21 +886,42 @@ fn eval_command(cmd: Option<Box<Node>>, flags: i32) -> Result<i32,i32> {
         redir::pop_redir(exec_cmd as i32);
     }
     var::unwind_local_vars(redir_stop);
-    var::unwind_files(file_stop);
+    input::unwind_files(file_stop);
     var::unwind_local_vars(local_var_stop);
     if lastarg.is_some() {
         
-        var::setvar("_", lastarg, 0);
+        var::setvar("_", &lastarg, 0);
     }
 
     return Ok(status);
 }
 
 fn eval_builtin(cmd: BuiltInCmd, argc:i32, argv: Vec<String>, flags: i32) -> Result<i32,i32> {
-    unimplemented!()
+    let mut status = 0;
+    let save_cmd_name = unsafe {COMMAND_NAME};
+
+    if cmd == EVALCMD!() {
+        status = eval_cmd(argc, argv, flags)?;
+    }
+    else {
+        status = cmd.builtin.unwrap()(argc, argv);
+    }
+    output::flush_all();
+    if outerr(out1) {
+        eprintln!("{}: I/O error", unsafe { COMMAND_NAME});
+    }
+
+    status |= outerr(out1);
+
+    unsafe {
+        EXIT_STATUS = status;
+        output::freestdout();
+        COMMAND_NAME = save_cmd_name;
+    }
+    Ok(status)
 }
 
-fn eval_func(func: FuncNode, argc:i32, argv: Vec<String>, flags:i32) -> Result<i32,i32> {
+fn eval_func(func: std::mem::ManuallyDrop<FuncNode>, argc:i32, argv: Vec<String>, flags:i32) -> Result<i32,i32> {
     unimplemented!()
 }
 

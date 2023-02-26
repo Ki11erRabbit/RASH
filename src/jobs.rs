@@ -52,6 +52,8 @@ pub static mut JOB_WARNING: i32 = 0;
 
 
 
+
+
 /*
  * Return a new job structure.
  * Called with interrupts off.
@@ -77,7 +79,9 @@ pub fn fork_shell(job: Rc<RefCell<Job>>, node: Option<Box<Node>>, mode: i32) -> 
     unimplemented!()
 }
 
-
+pub fn vforkexec(node: Option<Box<Node>>, argv: Vec<String>, path: &str, idx: i32) -> Rc<RefCell<Job>> {
+    unimplemented!()
+}
 /*
  * Wait for job to finish.
  *

@@ -154,7 +154,7 @@ pub fn popfile() {
     //unblock interrupts
 }
 
-fn unwind_files(stop_pos: usize) {
+pub fn unwind_files(stop_pos: usize) {
     let len = unsafe {
         PARSEFILE_STACK.lock().unwrap().len()
     };
