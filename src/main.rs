@@ -1,5 +1,6 @@
 mod show;
 mod alias;
+mod builtins;
 mod cd;
 mod error;
 mod eval;

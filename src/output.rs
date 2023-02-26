@@ -1,14 +1,14 @@
 
 
 pub struct Output {
-    buf: Option<String>,
-    fd: i32,
-    flags: i32,
+    pub buf: Option<String>,
+    pub fd: i32,
+    pub flags: i32,
 }
 
 pub const OUTPUT: Output = Output {buf: None, fd: 1, flags: 0};
 pub const ERROUT: Output = Output {buf: None, fd: 2, flags: 0};
-
+pub static mut PREV_ERR_OUT: Output = Output {buf: None, fd: -1, flags: 0};
 
 
 
@@ -54,5 +54,8 @@ pub fn out2c(c: char) {
 
 }
 pub fn out2str(string: &str) {
+
+}
+pub fn outstr(string: &str, out: &Output) {
 
 }

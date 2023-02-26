@@ -10,18 +10,18 @@ enum JobStates {
     Done,
 }
 
-pub struct ProcessStatus {
-    pid: Pid,       // process id
-    status: i32,    // last process status from wait()
-    cmd: String,    // text of command being run
-}
-
 /*
  * A job structure contains information about a job.  A job is either a
  * single process or a set of processes contained in a pipeline.  In the
  * latter case, pidlist will be non-NULL, and will point to a -1 terminated
  * array of pids.
  */
+pub struct ProcessStatus {
+    pid: Pid,       // process id
+    status: i32,    // last process status from wait()
+    cmd: String,    // text of command being run
+}
+
 pub struct Job {
     ps0: ProcessStatus,         // status of process 
     ps: Option<ProcessStatus>,  // status or processes when more than one
@@ -35,9 +35,16 @@ pub struct Job {
     changed: bool,              // true if status has changed
 }
 
+/* mode flags for showjob(s) */
 pub const SHOW_PGID: i32 = 0x01;        // only show pgid - for jobs -p
 pub const SHOW_PID: i32 = 0x04;         // include process pid
 pub const SHOW_CHANGED: i32 = 0x08;     // only jobs whose state has changed
+
+
+/* Mode argument to forkshell.  Don't change FORK_FG or FORK_BG. */
+pub const FORK_FG: i32 = 0;
+pub const FORK_BG: i32 = 0;
+pub const FORK_NOJOB: i32 = 2;
 
 pub static mut JOBCTL: bool = false;    // true if doing job control
 pub static mut JOB_WARNING: i32 = 0;
@@ -49,7 +56,7 @@ pub static mut JOB_WARNING: i32 = 0;
  * Return a new job structure.
  * Called with interrupts off.
  */
-pub fn make_job(node: Box<Option<Node>>, num_procs:i32) -> Rc<RefCell<Job>> {
+pub fn make_job(node: Option<Box<Node>>, num_procs:i32) -> Rc<RefCell<Job>> {
     unimplemented!()
 }
 /*
@@ -66,7 +73,7 @@ pub fn stopped_jobs() -> i32 {
     0
 }
 
-pub fn fork_shell(job: Rc<RefCell<Job>>, node: Box<Option<Node>>, mode: i32) -> Pid {
+pub fn fork_shell(job: Rc<RefCell<Job>>, node: Option<Box<Node>>, mode: i32) -> Pid {
     unimplemented!()
 }
 
@@ -92,6 +99,6 @@ pub fn fork_shell(job: Rc<RefCell<Job>>, node: Box<Option<Node>>, mode: i32) -> 
  * Called with interrupts off.
  */
 
-pub fn wait_for_job(job: Job) -> i32 {
+pub fn wait_for_job(job: Rc<RefCell<Job>>) -> i32 {
     unimplemented!()
 }

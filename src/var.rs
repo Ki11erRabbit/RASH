@@ -133,7 +133,7 @@ impl LocalVar {
 static mut LINENUM: usize = 0;
 lazy_static! {
     static ref DEFOPTINDVAR: String = "OPTIND=1".to_string();
-    static ref DEFPATHVAR: String = "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin".to_string();
+    pub static ref DEFPATHVAR: String = "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin".to_string();
     static ref DEFIFSVAR: String = "IFS= \t\n".to_string();
     static ref LINENOVAR: String = "LINENO=".to_string();
     pub static ref LOCALVARS: HashMap<String, LocalVar> = HashMap::new();
@@ -168,6 +168,13 @@ lazy_static! {
     pub static ref VHISTSIZE: Arc<Mutex<Var>> = VARINIT[11].clone();
 }
 
+#[macro_export]
+macro_rules! defpath {
+    () => {
+        crate::var::DEFPATHVAR.get(32..).unwrap().to_string()
+    };
+}
+
 /*
  * The following macros access the values of the above variables.
  * They have to skip over the name.  They return the null string
@@ -200,19 +207,22 @@ macro_rules! pathval {
         var::VPATH.lock().unwrap().get_val_index(5)
     };
 }
+#[macro_export]
 macro_rules! ps1val {
     () => {
-        VPS1.lock().unwrap().get_val_index(4)
+        crate::var::VPS1.lock().unwrap().get_val_index(4)
     };
 }
+#[macro_export]
 macro_rules! ps2val {
     () => {
-        VPS2.lock().unwrap().get_val_index(4)
+        crate::var::VPS2.lock().unwrap().get_val_index(4)
     };
 }
+#[macro_export]
 macro_rules! ps4val {
     () => {
-        VPS4.lock().unwrap().get_val_index(4)
+        crate::var::VPS4.lock().unwrap().get_val_index(4)
     };
 }
 macro_rules! optindval {
@@ -328,7 +338,7 @@ pub fn setvar(name: &str,val: &Option<String>,flags: i32) -> Result<Option<Arc<M
  * will go away.
  * Called with interrupts off.
  */
-fn setvareq(var_set: &str, flags: i32) -> Result<Option<Arc<Mutex<Var>>>,VarError> {
+pub fn setvareq(var_set: &str, flags: i32) -> Result<Option<Arc<Mutex<Var>>>,VarError> {
 
     let mut flags = flags;
     flags |= VEXPORT & (( (1 - super::aflag!() as i32)) - 1);

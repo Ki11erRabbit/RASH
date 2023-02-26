@@ -65,7 +65,7 @@ pub fn sh_open(path_name: &str, mayfail: i32) -> std::io::Result<i32> {
 }
 
 
-pub fn push_redir(redir:Box<Option<Node>>) -> Box<RedirTable> {
+pub fn push_redir(redir:Option<Box<Node>>) -> Box<RedirTable> {
 
     unimplemented!()
 
@@ -83,10 +83,10 @@ pub fn pop_redir(drop: i32) {
  * standard output, and the standard error if it becomes a duplicate of
  * stdout, is saved in memory.
  */
-pub fn redirect(redir: Box<Option<Node>>, flags: i32) {
+pub fn redirect(redir: Option<Box<Node>>, flags: i32) {
 
 }
 
-pub fn redirect_safe(redir: Box<Option<Node>>, flags: i32) -> Result<i32,i32> {
+pub fn redirect_safe(redir: Option<Box<Node>>, flags: i32) -> Result<i32,i32> {
     unimplemented!()
 }

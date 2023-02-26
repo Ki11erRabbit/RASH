@@ -1,19 +1,29 @@
 use crate::nodes::{Node, FuncNode};
 use crate::trap;
+use crate::init;
 use crate::options;
 use crate::exec;
+use crate::output;
+use crate::output::Output;
 use crate::redir;
 use crate::parser;
 use crate::nodes;
 use crate::jobs::Job;
 use crate::var;
 use crate::jobs;
-use super::Node_EOF;
+use crate::input;
+use crate::builtins;
+use crate::builtins::BuiltInCmd;
+use super::{Node_EOF,defpath,EXECCMD,COMMANDCMD};
 use crate::expand;
 use crate::expand::ArgList;
-use nix::unistd::getpid;
-use likely_stable::likely;
-use super::{nflag, eflag,trace,iflag,mflag};
+use crate::exec::{Param,CmdEntry};
+use std::cell::RefCell;
+use std::rc::Rc;
+use std::mem::ManuallyDrop;
+use nix::unistd::{getpid,pipe,close,dup2,Pid};
+use likely_stable::{unlikely,likely};
+use super::{nflag, eflag,trace,iflag,mflag,xflag,ps4val};
 /* reasons for skipping commands (see comment on breakcmd routine) */
 pub const SKIP_BREAK: i32 = 1 << 0;
 pub const SKIP_CONT:i32 = 1 << 1;
@@ -24,9 +34,10 @@ pub const SKIP_FUNC_DEF:i32 = 1 << 3;
 pub struct BackCmd {        // result of eval_back_cmd
     pub fd: i32,            // file descriptor to read from
     pub buf: String,        // buffer
-    pub job: Box<Option<Job>>,  // job structure from command
+    pub job: Option<Rc<RefCell<Job>>>,  // job structure from command
 }
 
+const BUILTIN: builtins::BuiltInCmd = builtins::BuiltInCmd {name: "", builtin: None, flags: builtins::BUILTIN_REGULAR as u32 };
 
 /* flags in argument to evaltree */
 pub const EV_EXIT: i32 = 0o1;                            // exit after evaluating tree
@@ -64,7 +75,7 @@ pub fn eval_cmd(argc: i32, argv: Vec<String>, flags: i32) -> Result<i32,i32> {
  * Execute a command or commands contained in a string.
  */
 pub fn eval_string(string: Option<String>, flags: i32) -> Result<i32,i32> {
-    let node: Box<Option<Node>>;
+    let node: Option<Box<Node>>;
     let mut status: i32 = 0;
 
     while {node = parser::parse_cmd(0); node != Node_EOF!()} {
@@ -101,7 +112,7 @@ macro_rules! eval_tree_error {
     };
 }
 
-fn eval_tree_no_return(node: Box<Option<Node>>, flags: i32) {
+fn eval_tree_no_return(node: Option<Box<Node>>, flags: i32) {
     eval_tree(node, flags);
     std::process::abort();
 }
@@ -110,9 +121,9 @@ fn eval_tree_no_return(node: Box<Option<Node>>, flags: i32) {
  * Evaluate a parse tree.  The value is left in the global variable
  * exitstatus.
  */
-pub fn eval_tree(node: Box<Option<Node>>, flags: i32) -> Result<i32,i32> {
+pub fn eval_tree(node: Option<Box<Node>>, flags: i32) -> Result<i32,i32> {
     let mut check_exit = 0;
-    let eval_func: fn(Box<Option<Node>>, i32) -> Result<i32,i32>;
+    let eval_func: fn(Option<Box<Node>>, i32) -> Result<i32,i32>;
     let is_or: i32;
     let mut status = 0;
 
@@ -279,7 +290,7 @@ fn skip_loop() -> i32 {
     skip
 }
 
-fn eval_loop(node: Box<Option<Node>>, flags: i32) -> Result<i32,i32> {
+fn eval_loop(node: Option<Box<Node>>, flags: i32) -> Result<i32,i32> {
     let mut skip;
     let mut status = 0;
     
@@ -332,10 +343,10 @@ fn eval_loop(node: Box<Option<Node>>, flags: i32) -> Result<i32,i32> {
     return Ok(status);
 }
 
-fn eval_for(node: Box<Option<Node>>, flags: i32) -> Result<i32,i32> {
+fn eval_for(node: Option<Box<Node>>, flags: i32) -> Result<i32,i32> {
     let arg_list: ArgList;
-    let arg_ptr: Box<Option<Node>>; 
-    let string_list: StringList;
+    let arg_ptr: Option<Box<Node>>; 
+    let string_list: Vec<String>;
     let mut status = 0;
 
     if unsafe {FUNC_LINE != 0} {
@@ -384,7 +395,7 @@ fn eval_for(node: Box<Option<Node>>, flags: i32) -> Result<i32,i32> {
     return Ok(status)    
 }
 
-fn eval_case(node: Box<Option<Node>>, flags: i32) -> Result<i32,i32>  {
+fn eval_case(node: Option<Box<Node>>, flags: i32) -> Result<i32,i32>  {
 
     let mut arg_list;
     let mut status = 0;
@@ -420,7 +431,7 @@ fn eval_case(node: Box<Option<Node>>, flags: i32) -> Result<i32,i32>  {
 /*
  * Kick off a subshell to evaluate a tree.
  */
-fn eval_subshell(node: Box<Option<Node>>, flags: i32) -> Result<i32,i32> {
+fn eval_subshell(node: Option<Box<Node>>, flags: i32) -> Result<i32,i32> {
     
     let background = node.unwrap().r#type == nodes::NBACKGND;
     let mut status = 0;
@@ -431,9 +442,9 @@ fn eval_subshell(node: Box<Option<Node>>, flags: i32) -> Result<i32,i32> {
         }
     }
 
-    redir::exp_redir(node.unwrap().nredir.redirect);
+    exp_redir(node.unwrap().nredir.redirect);
     //block interrupts
-    if !background && flags & EV_EXIT != 0 && !trap::have_traps() {
+    if !background && flags & EV_EXIT != 0 && trap::have_traps() == 0 {
         crate::init::fork_reset();
         //unblock interrupts
         redir::redirect(node.unwrap().nredir.redirect, 0);
@@ -461,20 +472,411 @@ fn eval_subshell(node: Box<Option<Node>>, flags: i32) -> Result<i32,i32> {
     return Ok(status)
 }
 
-fn exp_redir(node: Box<Option<Node>>) {
-    unimplemented!()
+/*
+ * Compute the names of the files in a redirection list.
+ */
+fn exp_redir(node: Option<Box<Node>>) {
+    let mut redir;
+    
+    redir = node;
+    while redir.is_some() {
+        
+        let file_name;
+        match redir.unwrap().r#type {
+            nodes::NFROMTO | nodes::NFROM | nodes::NTO | nodes::NCLOBBER | nodes:: NAPPEND => {
+                expand::expand_arg(redir.unwrap().nfile.file_name, &mut file_name, expand::EXP_TILDE | expand::EXP_REDIR);
+                redir.unwrap().nfile.expand_file_name = file_name.list[0];
+            },
+            nodes::NFROMFD | nodes::NTOFD => {
+                if redir.unwrap().ndup.vname.is_some() {
+                    expand::expand_arg(redir.unwrap().ndup.vname, &mut file_name, expand::EXP_TILDE | expand::EXP_REDIR);
+                    parser::fix_redir(redir,&file_name.list[0],1);
+                }
+            }
+        }
+
+        redir = redir.unwrap().nfile.next;
+    }
 }
 
-fn eval_pipe(node: Box<Option<Node>>, flags: i32) -> Result<i32,i32> {
-    unimplemented!()
+/*
+ * Evaluate a pipeline.  All the processes in the pipeline are children
+ * of the process creating the pipeline.  (This differs from some versions
+ * of the shell, which make the last process in a pipeline the parent
+ * of all the rest.)
+ */
+fn eval_pipe(node: Option<Box<Node>>, flags: i32) -> Result<i32,i32> {
+    
+    let mut pipe_len = 0;
+    let mut pip = (-1,-1);
+    let mut status = 0;
+
+    trace!("evalpipe({}) called\n",node.unwrap());
+    let mut list = node.unwrap().npipe.cmd_list;
+    while list.is_some() { 
+        pipe_len += 1;
+        list = list.unwrap().next;
+    }
+    flags |= EV_EXIT;
+    //block interrupts
+    let job = jobs::make_job(node, pipe_len);
+    let mut prev_fd = -1;
+
+    list = node.unwrap().npipe.cmd_list;
+    while list.is_some() {
+        if list.unwrap().next.is_some() {
+            let temp = pipe();
+            if temp.is_err() {
+                close(prev_fd); 
+                panic!("Pipe call failed");
+            }
+        }
+        if jobs::fork_shell(job, list.unwrap().node, node.unwrap().npipe.background) == Pid::from_raw(0) {
+            //unblock interrupts
+            if pip.1 >= 0 {
+                close(pip.0);
+            }
+            if prev_fd > 0 {
+                dup2(prev_fd,0);
+                close(prev_fd);
+            }
+            if pip.1 > 1 {
+                dup2(pip.1,1);
+                close(pip.1);
+            }
+            eval_tree_no_return(list.unwrap().node, flags);
+            //never returns
+        }
+        if prev_fd >= 0 {
+            close(prev_fd);
+        }
+        prev_fd = pip.0;
+        close(pip.1);
+
+        list = list.unwrap().next;
+    }
+    if node.unwrap().npipe.background == 0 {
+        status = jobs::wait_for_job(job);
+        trace!("evalpipe: job done exit status {}\n",status);
+    }
+    //unblock interrupts
+    return Ok(status)
 } 
 
-fn eval_back_cmd(node: Box<Option<Node>>, result: BackCmd) {
-    unimplemented!()
+/*
+ * Execute a command inside back quotes.  If it's a builtin command, we
+ * want to save its output in a block obtained from malloc.  Otherwise
+ * we fork off a subprocess and get the output of the command via a pipe.
+ * Should be called with interrupts off.
+ */
+fn eval_back_cmd(node: Option<Box<Node>>, result: &mut BackCmd) -> Result<(),nix::errno::Errno>{
+    let mut pip = (-1,-1);
+    let mut job;
+
+    *result = BackCmd {fd: -1, buf: String::new(), job: None};
+    if node.is_none() {
+        trace!("eval_back_cmd done: fd={} buf={} nleft= {} jp=",result.fd,result.buf,result.buf.len());
+        return Err(nix::errno::Errno::UnknownErrno);
+    }
+
+    pip = pipe()?;
+
+    job = jobs::make_job(node,1);
+    if jobs::fork_shell(job,node, jobs::FORK_NOJOB) == Pid::from_raw(0) {
+        //forcibly block interrupts
+        close(pip.0);
+        if pip.1 != 1 {
+            dup2(pip.1,1);
+            close(pip.1);
+        }
+        expand::ifs_free();
+        eval_tree_no_return(node, EV_EXIT);
+        // NOT REACHED
+    }
+    close(pip.1);
+    result.fd = pip.0;
+    result.job = Some(job);
+
+    trace!("eval_back_cmd done: fd={} buf={} nleft= {} jp=",result.fd,result.buf,result.buf.len());
+    
+    return Ok(())
 }
 
-fn eval_command(node: Box<Option<Node>>, flags: i32) -> Result<i32,i32> {
-    unimplemented!()
+fn fill_arglist(arglist: ArgList, args: Vec<Box<Node>>) -> Vec<String> {
+    let ret_args;
+    for arg in args {
+        expand::expand_arg(Some(arg), &mut ret_args, expand::EXP_FULL | expand::EXP_TILDE);
+        
+    }
+
+    ret_args.list
+}
+
+fn parse_command_args(arg_list: ArgList, args: Vec<Box<Node>>, path: &mut Vec<String>) -> i32 {
+
+    let strings = arg_list.list;
+    let mut counter = 0;
+    let mut sub_counter = 0;
+    loop {
+        strings = if unlikely(counter < strings.len()) {strings} else {{counter = 0; fill_arglist(arg_list, args)}};
+
+        if strings.len() == 0 {
+            return 0;
+        }
+        let text = strings[counter];
+
+        if text.chars().collect::<Vec<char>>()[sub_counter] != '-' {
+            break;
+        }
+        sub_counter += 1;
+        
+        if !text.len() > 2 {
+            break;
+        }
+        if text.chars().collect::<Vec<char>>()[sub_counter] == '-' && text.len() == 2 {// this part is likely to have some problems
+            if likely(strings.len() == counter - 1) && fill_arglist(arg_list, args).len() == 0 {
+                return 0;
+            }
+            counter += 1;
+            break;
+        }
+        sub_counter += 1;
+        loop {
+            
+            match text.chars().collect::<Vec<char>>()[sub_counter] {
+                'p' => path.push(defpath!()),
+                _ => return 0,// run 'typecmd' for other options
+            }
+
+            
+            
+            sub_counter += 1;
+            if sub_counter == text.len() {
+                break;
+            }
+        }
+    }
+    arg_list.list = strings;
+    return exec::DO_NOFUNC;
+}
+
+/*
+ * Execute a simple command.
+ */
+fn eval_command(cmd: Option<Box<Node>>, flags: i32) -> Result<i32,i32> {
+    
+    unsafe {
+        var::LINE_NUM = cmd.unwrap().ncase.line_num;
+        if FUNC_LINE != 0 {
+            var::LINE_NUM -= FUNC_LINE - 1;
+        }
+    }
+
+    // First expand the arguments
+    trace!("evalcommand({}, {}) called\n",cmd.unwrap(),flags);
+    let file_stop;
+    unsafe {
+        file_stop = input::PARSEFILE_STACK.lock().unwrap().last().unwrap();
+        BACK_EXIT_STATUS = 0;
+    }
+    
+    let mut cmd_entry = CmdEntry { cmd_type: exec::CMD_BUILTIN, param: exec::Param{cmd: std::mem::ManuallyDrop::new(builtins::BUILTIN_CMD[0]) } };
+
+    let mut cmd_flag;
+    let exec_cmd = false;
+    let special_builtin = -1;
+    let mut vflags = 0;
+    let mut vlocal = 0;
+    let mut path;
+    let arglist;
+    let mut status = 0;
+
+    let mut argc = 0;
+
+    let args = cmd.unwrap().ncmd.args_vec;
+    let osp = fill_arglist(arglist, args);
+    if osp.len() > 0 {
+        let mut pseudo_var_flag = 0;
+
+        loop {
+            exec::find_command(arglist.list[0], &mut cmd_entry, cmd_flag | DO_REGBLTIN, pathval());
+
+            vlocal += 1;
+
+            if cmd_entry.cmd_type != exec::CMD_BUILTIN {
+                break;
+            }
+
+            pseudo_var_flag = cmd_entry.param.cmd.flags & builtins::BUILTIN_ASSIGN as u32;
+            if likely(special_builtin < 0) {
+                special_builtin = cmd_entry.param.cmd.flags as i32 & builtins::BUILTIN_SPECIAL;
+
+                vlocal = special_builtin as i32 ^ builtins::BUILTIN_SPECIAL;
+            }
+            exec_cmd = cmd_entry.param.cmd == std::mem::ManuallyDrop::new(EXECCMD!());
+
+            if likely(cmd_entry.param.cmd != std::mem::ManuallyDrop::new(COMMANDCMD!())) {
+                break
+            }
+
+            cmd_flag = parse_command_args(arglist, args, path);
+            if cmd_flag != 0 {
+                break;
+            }
+        }
+
+        for arg in args.iter() {
+            let temp = if pseudo_var_flag != 0 && is_assignment(arg.narg.text) {expand::EXP_VARTILDE} else {expand::EXP_FULL | expand::EXP_TILDE};
+            expand::expand_arg(Some(arg),&mut arglist,temp);
+
+        }
+
+        for args in arglist.list.iter() {
+            argc += 1;
+        }
+
+        if exec_cmd && argc > 1 {
+            vflags = var::VEXPORT;
+        }
+    }
+
+    let local_var_stop = var::push_local_vars(vlocal != 0);
+  
+
+    let argv;//TODO initialize argv
+
+
+    unsafe {
+        output::PREV_ERR_OUT.fd = 2;
+    }
+    exp_redir(cmd.unwrap().ncmd.redirect);
+    let redir_stop = redir::push_redir(cmd.unwrap().ncmd.redirect);
+    status = redir::redirect_safe(cmd.unwrap().ncmd.redirect, redir::REDIR_PUSH|redir::REDIR_SAVEFD2);
+
+    if unlikely(status != 0) {
+        unsafe {
+            EXIT_STATUS = status;
+        }
+
+        if special_builtin > 0 {
+            eprintln!("Redirection Error");
+        }
+
+        if cmd.unwrap().ncmd.redirect.is_some() {
+            redir::pop_redir(exec_cmd as i32);
+        }
+        var::unwind_local_vars(redir_stop);
+        var::unwind_files(file_stop);
+        var::unwind_local_vars(local_var_stop);
+        if lastarg.is_some() {
+            
+            var::setvar("_", lastarg, 0);
+        }
+
+        return Err(status);
+    }
+
+    let mut args = cmd.unwrap().ncmd.assign;
+    
+    let varlist;
+    while args.is_some() {
+        expand::expand_arg(args, &mut varlist, expand::EXP_VARTILDE);
+        
+        let string = varlist.list.last().unwrap();
+        if vlocal != 0 {
+            var::make_local(string, var::VEXPORT);
+        }
+        else {
+            var::setvareq(string, vflags);
+        }   
+
+        args = args.unwrap().narg.next;
+    }
+
+	/* Print the command if xflag is set. */
+    if xflag!() as i32 != 0 && unsafe {init::INPS4} != 0 {
+        let out: &mut Output = unsafe {&mut output::PREV_ERR_OUT};
+        let sep = 0;
+        
+        unsafe {
+            init::INPS4 = 1;
+        }
+        
+        output::outstr(&parser::expand_str(ps4val!()),out);
+
+        unsafe {
+            init::INPS4 = 0;
+        }
+
+        sep = eprintlist(out,osp,sep);
+        output::outcslow('\n');
+    }
+
+    let job;
+
+	/* Execute the command. */
+    match cmd_entry.cmd_type {
+        exec::CMD_UNKNOWN => {
+            status = 127;
+            unsafe {
+                EXIT_STATUS = status;
+            }
+
+            if special_builtin > 0 {
+                eprintln!("Redirection Error");
+            }
+
+            if cmd.unwrap().ncmd.redirect.is_some() {
+                redir::pop_redir(exec_cmd as i32);
+            }
+            var::unwind_local_vars(redir_stop);
+            var::unwind_files(file_stop);
+            var::unwind_local_vars(local_var_stop);
+            if lastarg.is_some() {
+                
+                var::setvar("_", lastarg, 0);
+            }
+
+            return Err(status);
+        },
+        _ => {
+		    /* Fork off a child process if necessary. */
+            'loop_once: loop {
+
+                if !(flags & EV_EXIT != 0) || traps::have_traps() {
+                    //block interrupts
+
+                    job = job::vforkexec(cmd, argv, path, cmd_entry.param.index);
+                    break 'loop_once;
+                }
+                exec::shell_exec(argv, path, cmd_entry.param.index);
+                // NOT REACHED
+            } 
+        },
+        exec::CMD_BUILTIN => {
+            eval_builtin(cmd_entry.param.cmd, argc, argv, flags)?;
+        },
+        exec::CMD_FUNCTION => {
+            eval_func(cmd_entry.param.func, argc, argv, flags)?;
+        }
+    }
+
+    status = jobs::wait_for_job(job);
+
+    //force interrupts on
+
+    if cmd.unwrap().ncmd.redirect.is_some() {
+        redir::pop_redir(exec_cmd as i32);
+    }
+    var::unwind_local_vars(redir_stop);
+    var::unwind_files(file_stop);
+    var::unwind_local_vars(local_var_stop);
+    if lastarg.is_some() {
+        
+        var::setvar("_", lastarg, 0);
+    }
+
+    return Ok(status);
 }
 
 fn eval_builtin(cmd: BuiltInCmd, argc:i32, argv: Vec<String>, flags: i32) -> Result<i32,i32> {
@@ -512,4 +914,9 @@ fn exec_cmd(argc:i32, argv: Vec<String>) -> Result<i32,i32> {
     }
 
     return Ok(0)
+}
+
+fn eprintlist(out: &mut Output, strings: Vec<String>, sep: i32) -> i32 {
+
+    unimplemented!()
 }

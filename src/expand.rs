@@ -27,14 +27,14 @@ pub struct ArgList {
  * perform splitting and file name expansion.  When arglist is NULL, perform
  * here document expansion.
  */
-pub fn expand_arg(arg: Box<Option<Node>>, arg_list: &mut ArgList, flag: i32) {
+pub fn expand_arg(arg: Option<Box<Node>>, arg_list: &mut ArgList, flag: i32) {
     unimplemented!()
 }
 
 /*
  * See if a pattern matches in a case statement.
  */
-pub fn case_match(pattern: Box<Option<Node>>, val: &str) -> i32 {
+pub fn case_match(pattern: Option<Box<Node>>, val: &str) -> i32 {
     unimplemented!()
 }
 

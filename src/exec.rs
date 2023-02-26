@@ -1,4 +1,30 @@
-use crate::nodes::Node;
+use crate::nodes::{Node,FuncNode};
+use crate::builtins::BuiltInCmd;
+
+pub union Param {
+    pub index: i32,
+    pub cmd: BuiltInCmd,
+    pub func: std::mem::ManuallyDrop<FuncNode>,
+}
+
+pub struct CmdEntry {
+    pub cmd_type: i32,
+    pub param: Param, 
+}
+
+
+pub const CMD_UNKNOWN: i32 = -1;    // no entry in table for command
+pub const CMD_NORMAL: i32 = 0;      // command is an executable progam
+pub const CMD_FUNCTION: i32 = 1;   // command is a shell function
+pub const CMD_BUILTIN: i32 = 2;     // command is a shell builtin
+
+
+/* action to find_command() */
+pub const DO_ERR: i32 =	    	0x01;	/* prints errors */
+pub const DO_ABS: i32 =		    0x02;	/* checks absolute paths */
+pub const DO_NOFUNC: i32 =	    0x04;	/* don't return shell functions, for command */
+pub const DO_ALTPATH: i32 =	    0x08;	/* using alternate path */
+pub const DO_REGBLTIN: i32 =	0x10;	/* regular built-ins and functions only */
 
 pub static mut PATHOPT: Option<String> = None;
 

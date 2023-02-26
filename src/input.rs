@@ -66,7 +66,7 @@ impl Parsefile {
 }
 
 
-static mut PARSEFILE_STACK: Mutex<Vec<Parsefile>> = Mutex::new(Vec::new());
+pub static mut PARSEFILE_STACK: Mutex<Vec<Parsefile>> = Mutex::new(Vec::new());
 /*
  * Set the input to take input from a file.  If push is set, push the
  * old input onto the stack first.

@@ -34,3 +34,7 @@ pub fn expand_str(ps: &str) -> String {
 
     "hello world".to_string()
 }
+
+pub fn fix_redir(node: Option<Box<Node>>, text: &str, err: i32) {
+
+}

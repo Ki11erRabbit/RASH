@@ -6,7 +6,14 @@ pub fn exit_shell() {
     process::exit(0);
 }
 
+pub static mut TRAP_COUNT: i32 = 0;
 
+#[inline]
+pub fn have_traps() -> i32 {
+    unsafe {
+        TRAP_COUNT
+    }
+}
 
 
 /*

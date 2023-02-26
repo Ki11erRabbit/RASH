@@ -1,5 +1,6 @@
+use nix::unistd::close;
 
-
+pub static mut INPS4: i32 = 0;
 
 
 pub fn fork_reset() {

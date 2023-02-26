@@ -29,10 +29,11 @@ pub const NNOT: i32 = 25;
 #[derive(PartialEq)]
 pub struct ncmd {
     pub r#type: i32,
-    pub line_no: i32,
-    pub assign: Box<Option<Node>>,
-    pub args: Box<Option<Node>>,
-    pub redirect: Box<Option<Node>>
+    pub line_num: i32,
+    pub assign: Option<Box<Node>>,
+    pub args: Option<Box<Node>>,
+    pub args_vec: Vec<Box<Node>>,
+    pub redirect: Option<Box<Node>>
 }
 
 
@@ -40,7 +41,7 @@ pub struct ncmd {
 pub struct npipe {
     pub r#type: i32,
     pub background: i32,
-    pub cmd_list: Box<Option<NodeList>>,
+    pub cmd_list: Option<Box<NodeList>>,
 }
 
 
@@ -48,24 +49,24 @@ pub struct npipe {
 pub struct nredir {
     pub r#type: i32,
     pub line_num: i32,
-    pub node: Box<Option<Node>>,
-    pub redirect: Box<Option<Node>>,
+    pub node: Option<Box<Node>>,
+    pub redirect: Option<Box<Node>>,
 }
 
 
 #[derive(PartialEq)]
 pub struct nbinary {
     pub r#type: i32,
-    pub ch1: Box<Option<Node>>,
-    pub ch2: Box<Option<Node>>,
+    pub ch1: Option<Box<Node>>,
+    pub ch2: Option<Box<Node>>,
 }
 
 #[derive(PartialEq)]
 pub struct nif {
     pub r#type: i32,
-    pub test: Box<Option<Node>>,
-    pub if_part: Box<Option<Node>>,
-    pub else_part: Box<Option<Node>>,
+    pub test: Option<Box<Node>>,
+    pub if_part: Option<Box<Node>>,
+    pub else_part: Option<Box<Node>>,
 }
 
 
@@ -73,8 +74,8 @@ pub struct nif {
 pub struct nfor {
     pub r#type: i32,
     pub line_num: i32,
-    pub args: Box<Option<Node>>,
-    pub body: Box<Option<Node>>,
+    pub args: Option<Box<Node>>,
+    pub body: Option<Box<Node>>,
     pub var: String,
 }
 
@@ -83,17 +84,17 @@ pub struct nfor {
 pub struct ncase {
     pub r#type: i32,
     pub line_num: i32,
-    pub expr: Box<Option<Node>>,
-    pub cases: Box<Option<Node>>,
+    pub expr: Option<Box<Node>>,
+    pub cases: Option<Box<Node>>,
 }
 
 
 #[derive(PartialEq)]
 pub struct nclist {
     pub r#type: i32,
-    pub next: Box<Option<Node>>,
-    pub pattern: Box<Option<Node>>,
-    pub body: Box<Option<Node>>,
+    pub next: Option<Box<Node>>,
+    pub pattern: Option<Box<Node>>,
+    pub body: Option<Box<Node>>,
 }
 
 
@@ -102,50 +103,51 @@ pub struct ndefun {
     pub r#type: i32,
     pub line_num: i32,
     pub text: String,
-    pub body: Box<Option<Node>>
+    pub body: Option<Box<Node>>
 }
 
 
 #[derive(PartialEq)]
 pub struct narg {
     pub r#type: i32,
-    pub next: Box<Option<Node>>,
+    pub next: Option<Box<Node>>,
     pub text: String,
-    pub back_quote: Box<Option<NodeList>>,
+    pub back_quote: Option<Box<NodeList>>,
 }
 
 
 #[derive(PartialEq)]
 pub struct nfile {
     pub r#type: i32,
-    pub next: Box<Option<Node>>,
+    pub next: Option<Box<Node>>,
     pub fd: i32,
-    pub file_name: Box<Option<Node>>,
-    pub expfname: String,
+    pub file_name: Option<Box<Node>>,
+    pub expand_file_name: String,
 }
 
 
 #[derive(PartialEq)]
 pub struct ndup {
     pub r#type: i32,
-    pub next: Box<Option<Node>>,
+    pub next: Option<Box<Node>>,
     pub fd: i32,
-    pub doc: Box<Option<Node>>
+    pub dup_fd: i32,
+    pub vname: Option<Box<Node>>
 }
 
 
 #[derive(PartialEq)]
 pub struct nhere {
     pub r#type: i32,
-    pub next: Box<Option<Node>>,
+    pub next: Option<Box<Node>>,
     pub fd: i32,
-    pub doc: Box<Option<Node>>,
+    pub doc: Option<Box<Node>>,
 }
 
 #[derive(PartialEq)]
 pub struct nnot {
     pub r#type: i32,
-    pub com: Box<Option<Node>>,
+    pub com: Option<Box<Node>>,
 }
 
 pub union Node {
@@ -200,8 +202,8 @@ impl PartialEq for Node {
 }
 
 pub struct NodeList {
-    next: Box<Option<NodeList>>,
-    node: Node,
+    pub next: Option<Box<NodeList>>,
+    pub node: Option<Box<Node>>,
 }
 
 impl PartialEq for NodeList {
@@ -225,8 +227,21 @@ impl PartialEq for NodeList {
 }
 
 pub struct FuncNode {
-    count: i32,
-    node: Box<Node>,
+    pub count: i32,
+    pub node: Option<Box<Node>>,
+}
+
+impl Clone for FuncNode {
+    fn clone(&self) -> Self {
+        match self.node {
+            None => {
+                return Self {count: self.count, node: None}
+            },
+            Some(val) => {
+                return Self {count: self.count, node: Some(Box::new(*val))}
+            }
+        }
+    } 
 }
 
 
