@@ -960,36 +960,110 @@ fn eval_func(func: std::mem::ManuallyDrop<FuncNode>, argc: usize, argv: Vec<Stri
     return Ok(status);
 }
 
-fn break_cmd(argc:i32, argv: Vec<String>) {
+/*
+ * Builtin commands.  Builtin commands whose functions are closely
+ * tied to evaluation are implemented here.
+ */
 
+/*
+ * No command given.
+ */
+
+fn bultin_cmd(argc: usize, argv: Vec<String>) -> i32 {
+	/*
+	 * Preserve exitstatus of a previous possible redirection
+	 * as POSIX mandates
+	 */
+    unsafe {
+        return BACK_EXIT_STATUS;
+    }
 }
 
-fn return_cmd(argc:i32, argv: Vec<String>) -> Result<i32,i32> {
-    unimplemented!()
+/*
+ * Handle break and continue commands.  Break, continue, and return are
+ * all handled by setting the evalskip flag.  The evaluation routines
+ * above all check this flag, and if it is set they start skipping
+ * commands rather than executing them.  The variable skipcount is
+ * the number of loops to break/continue, or the number of function
+ * levels to return.  (The latter is always 1.)  It should probably
+ * be an error to break out of more loops than exist, but it isn't
+ * in the standard shell so we don't make it one here.
+ */
+fn break_cmd(argc: usize, argv: Vec<String>) -> Result<i32,i32> {
+    let n = if argc > 1 { argv[1].parse::<i32>().unwrap() } else { 1 };
+
+    if n <= 0 {
+        eprintln!("{}: bad number", argv[1]);
+        return Err(1);
+    }
+    unsafe {
+        if n > LOOP_NEST {
+            n = LOOP_NEST;
+        }
+    }
+    if n > 0 {
+        unsafe {
+            EVAL_SKIP = if argv[0].chars().nth(0).unwrap() == 'c' { SKIP_CONT } else { SKIP_BREAK };
+            SKIP_COUNT = n;
+        }
+    }
+
+    Ok(0)
 }
 
-fn false_cmd(argc:i32,argv: Vec<String>) -> bool {
+/*
+ * The return command.
+ */
+fn return_cmd(argc: usize, argv: Vec<String>) -> Result<i32,i32> {
+    let skip;
+    let status;
+	/*
+	 * If called outside a function, do what ksh does;
+	 * skip the rest of the file.
+	 */
+    if argv.len() > 1 {
+        skip = SKIP_FUNC;
+        status = argv[1].parse::<i32>().unwrap();
+    }
+    else {
+        skip = SKIP_FUNC_DEF;
+        status = unsafe { EXIT_STATUS };
+    }
+
+    return Ok(status)
+}
+
+fn false_cmd(argc: usize,argv: Vec<String>) -> bool {
     false
 }
 
-fn true_cmd(argc:i32,argv: Vec<String>) -> bool {
+fn true_cmd(argc: usize,argv: Vec<String>) -> bool {
     true
 }
 
-fn exec_cmd(argc:i32, argv: Vec<String>) -> Result<i32,i32> {
+fn exec_cmd(argc: usize, argv: Vec<String>) -> Result<i32,i32> {
     let mut argv = argv;
     if argc > 1 {
         iflag!(0 as char);
         mflag!(0 as char);
         options::opts_changed();
         argv.remove(0);
-        exec::shell_exec(argv,pathval!(), 0);
+        exec::shell_exec(argv.into_iter().skip(1).collect(),pathval!(), 0);
     }
 
     return Ok(0)
 }
 
-fn eprintlist(out: &mut Output, strings: Vec<String>, sep: i32) -> i32 {
+fn eprintlist(out: &mut Output, strings: Vec<String>, sep: bool) -> i32 {
+    for string in strings.iter() {
+        if sep {
+            output::outfmt(out, " {}", string);
 
+        }
+        else {
+            output::outfmt(out, "{}", string);
+
+        }
+    }
     unimplemented!()
 }
