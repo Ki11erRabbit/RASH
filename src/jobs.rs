@@ -1,15 +1,17 @@
 use crate::output::Output;
 use crate::nodes::Node;
 use crate::options;
+use crate::system;
 use crate::redir;
 use super::mflag;
 use nix::unistd::{Pid,close};
 use nix::errno::errno;
-use nix::sys::signal::{kill,SIGTTIN,SIGTTOU,SIGTSTP};
+use nix::sys::signal::{kill,SIGTTIN,SIGTTOU,SIGTSTP,Signal,Signal::SIGINT,Signal::SIGPIPE};
+use nix::sys::wait::{WaitStatus};
 use std::cell::RefCell;
 use std::rc::Rc;
-
-enum JobStates {
+#[derive(PartialEq, Eq, Debug)]
+enum JobState {
     Running,
     Stopped,
     Done,
@@ -24,21 +26,22 @@ enum JobStates {
 #[derive(PartialEq, Eq, Debug)]
 pub struct ProcessStatus {
     pid: Pid,       // process id
-    status: i32,    // last process status from wait()
+    status: WaitStatus,    // last process status from wait()
     pub cmd: String,    // text of command being run
 }
 
+#[derive(PartialEq, Eq, Debug)]
 pub struct Job {
     pub ps0: ProcessStatus,         // status of process 
-    ps: Option<ProcessStatus>,  // status or processes when more than one
+    ps: Vec<ProcessStatus>,  // status or processes when more than one
     stop_status: i32,           // status of a stopped job
     num_procs: u16,             // number of processes
-    pub state: JobStates,
+    pub state: JobState,
     sigint: bool,               // job was killed by SIGINT
     jobctl: bool,               // job running under job control
     waited: bool,               // true if this entry has been waited for
     used: bool,                 // true if this entry is in used
-    changed: bool,              // true if status has changed
+    pub changed: bool,              // true if status has changed
 }
 
 /* mode flags for showjob(s) */
@@ -46,6 +49,10 @@ pub const SHOW_PGID: i32 = 0x01;        // only show pgid - for jobs -p
 pub const SHOW_PID: i32 = 0x04;         // include process pid
 pub const SHOW_CHANGED: i32 = 0x08;     // only jobs whose state has changed
 
+/* mode flags for set_curjob */
+pub const CUR_RUNNING: i32 = 1;      // job is now running
+pub const CUR_STOPPED: i32 = 0;      // job is now stopped
+pub const CUR_DELETE: i32 = 2;       // job is being deleted
 
 /* Mode argument to forkshell.  Don't change FORK_FG or FORK_BG. */
 pub const FORK_FG: i32 = 0;
@@ -264,6 +271,168 @@ pub fn killcmd(argc: usize, argv: Vec<String>) -> Result<i32,i32> {
 
 }
 
+fn job_num(job: Rc<RefCell<Job>>) -> usize {
+    return unsafe { JOBTABLE.iter().position(|x| *x.borrow() == *job.borrow()).unwrap()};
+}
+
+pub fn fg_cmd(argc: usize, argv: Vec<String>) -> Result<i32,i32> {
+    let job;
+    let Out: Output;
+    let mode;
+    let ret_val;
+
+    mode = if argv[0].chars().nth(0) == Some('f') {FORK_FG} else {FORK_BG};
+    options::nextopt("");
+    argv = unsafe { options::ARGPOINTER.iter().map(|x| x.unwrap()).collect() };
+    let out = &mut out1;
+    for arg in argv.iter() {
+        job = get_job(arg, 1);
+        if mode == FORK_BG {
+            set_curjob(job,CUR_RUNNING);
+            outfmt(out,"[{}]", job_num(job));
+        }
+        outstr(job.borrow().ps.unwrap().cmdline, out);
+        show_pipe(job,out);
+        ret_val = restart_job(job,mode);
+    }
+
+    ret_val
+}
+
+pub fn bg_cmd(argc: usize, argv: Vec<String>) -> Result<i32,i32> {
+    return fg_cmd(argc, argv);
+}
+
+fn restart_job(job: Rc<RefCell<Job>>, mode: i32) -> Result<i32,i32> {
+    let proc_status;
+    let mut status = 0;
+    let mut pgid;
+
+    //block interrupts
+    if job.borrow().state == JobState::Done {
+        status = if mode == FORK_FG {wait_for_job(job)} else {0};
+        //unblock interrupts
+        return Ok(status);
+    }
+    job.borrow_mut().state = JobState::Running;
+    pgid = job.borrow().ps.unwrap().pid;
+    if mode == FORK_FG {
+        xtc_set_process_group(TTYFD, pgid);
+    }
+    kill_process_group(pgid, Some(SIGCONT));
+    let mut ps = job.borrow_mut().ps0;
+
+    if matches!(ps.status,WaitStatus::Stopped(_,_)) {
+        ps.status = WaitStatus::Exited(pgid,-1);
+    }
+
+    for proc in job.borrow_mut().ps.iter_mut() {
+        if matches!(proc.status,WaitStatus::Stopped(_,_)) {
+            proc.status = WaitStatus::Exited(pgid,-1);
+        }
+    }
+    
+
+    status = if mode == FORK_FG {wait_for_job(job)} else {0};
+    //unblock interrupts
+    Ok(status)
+}
+
+fn sprint_status(output_string: &str, wait_status: WaitStatus, sigonly: i32) -> String {//TODO: check to see if output is correct
+    let mut status: Option<i32> = None;
+    let mut signal: Option<Signal> = None;
+    let mut string = output_string.to_string();
+
+    match wait_status {
+        WaitStatus::Exited(pid, code) => {
+            status = Some(code);
+        },
+        WaitStatus::Signaled(pid, sig, core_dumped) => {
+            signal = Some(sig);
+            if sig == SIGINT || sig == SIGPIPE {
+                return string;
+            }
+            string += &system::string_signal(sig);
+            if core_dumped {
+                string += " (core dumped)";
+            }
+            
+        },
+        WaitStatus::Stopped(pid, sig) => {
+            signal = Some(sig);
+            string += &system::string_signal(sig);
+        },
+        _ => (),
+    }
+    if sigonly == 0 {
+        if status.is_some() {
+            string += &format!("Done({})", status.unwrap());
+        }
+        else {
+            string += "Done";
+        }
+    }
+    
+    string
+}
+
+fn show_job(out: &mut Output, job: Rc<RefCell<Job>>, mode: i32) {
+    let ps = job.borrow().ps;
+    let mut string;
+    
+    if mode & SHOW_PGID == SHOW_PGID {
+        output::outfmt(out,"{}\n", ps[0].pid);
+    }
+
+    let string = format!("[{}]   ", job_num(job));
+    let mut col = string.len();
+    let mut indent = col;
+
+    if *job.borrow() == unsafe { *CUR_JOB.unwrap().borrow() } {
+        string.replace_range(col - 2..=col - 2, "+");
+    }
+    else {// if currjob && job == curjob.prev_job
+        string.replace_range(col - 2..=col - 2, "-");
+    }
+    
+    let pos = job.borrow().ps.len() - 1;
+    let proc_send = ps;
+
+    if job.borrow().state == JobState::Running {
+        string += " Running";
+        col += "Running".len();
+    }
+    else {
+        let status = proc_send[pos -1].status;
+        let stop_status;
+        if job.borrow().state == JobState::Stopped {
+            status = job.borrow().ps0.status;
+        }
+        let temp = sprint_status(&string, status,0);
+        string += &temp;
+        col += temp.len();
+    }
+
+    for proc in ps.iter() {
+        output::outfmt(out, {}{}{}, string, " ", proc.cmd);//TODO: figure out spacing length it is the the variable indent
+        
+        if ! (mode & SHOW_PID == SHOW_PID) {
+            show_pipe(job, out);
+            break;
+        }
+        if ps.len() > 1 {
+            output::outfmt(out, " |\n{}{} ", " ", proc.pid);//TODO: figure out spacing length it is the the variable indent
+        }
+    }
+    outcslow('\n',out);
+
+    job.borrow_mut().changed = false;
+
+    if job.borrow().state == JobState::Done {
+        trace!("showjob: freeing job {}\n", job_num(job));
+        free_job(job);
+    }
+}
 
 /*
  * Return a new job structure.
